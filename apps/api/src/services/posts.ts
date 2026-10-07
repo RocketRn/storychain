@@ -3,6 +3,7 @@ import type { Chain, Post, User } from "@prisma/client";
 import {
   FREE_DAILY_LIMIT,
   getTemplate,
+  isPremiumFont,
   type CreatePostFields,
   type PostDTO,
   type PublicUserDTO,
@@ -49,6 +50,7 @@ export async function publishPost(
   const template = getTemplate(fields.templateId);
   if (!template) throw errors.badRequest("Unknown template");
   if (template.isPremium && !pro) throw errors.proRequired();
+  if (fields.fontFamily && isPremiumFont(fields.fontFamily) && !pro) throw errors.proRequired();
 
   // Cheap pre-flight so we don't process/store images for an over-limit user. The authoritative,
   // atomic check happens inside the DB transaction below.

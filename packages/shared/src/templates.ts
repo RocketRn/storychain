@@ -4,6 +4,9 @@ export const CARD_HEIGHT = 1920;
 /** Telegram story UI overlays top/bottom; keep important content out of these bands. */
 export const SAFE_TOP = 250;
 export const SAFE_BOTTOM = 250;
+/** Size of the "Your turn" sticker drawn on the card. */
+export const STICKER_W = 900;
+export const STICKER_H = 320;
 
 export interface GradientBg {
   type: "gradient";
@@ -62,16 +65,16 @@ export interface Template {
 
 const frame = (over: Partial<PhotoFrame> = {}): PhotoFrame => ({
   x: 90,
-  y: 330,
+  y: 310,
   w: 900,
-  h: 1000,
+  h: 960,
   radius: 48,
   rotationDeg: 0,
   ...over,
 });
 
 const sticker = (over: Partial<StickerStyle> = {}): StickerStyle => ({
-  y: 1400,
+  y: 1340,
   fill: "#ffffff",
   text: "#111111",
   accent: "#ff3d71",
@@ -84,7 +87,14 @@ export const TEMPLATES: readonly Template[] = [
     id: "sunset",
     name: "Sunset",
     isPremium: false,
-    background: { type: "gradient", angleDeg: 160, stops: [[0, "#ff9a62"], [1, "#c13584"]] },
+    background: {
+      type: "gradient",
+      angleDeg: 160,
+      stops: [
+        [0, "#ff9a62"],
+        [1, "#c13584"],
+      ],
+    },
     photoFrame: frame(),
     stickerStyle: sticker(),
     palette: { text: "#ffffff", mutedText: "#ffe5d6", accent: "#ffffff" },
@@ -95,7 +105,14 @@ export const TEMPLATES: readonly Template[] = [
     id: "ocean",
     name: "Ocean",
     isPremium: false,
-    background: { type: "gradient", angleDeg: 180, stops: [[0, "#2193b0"], [1, "#0b3d63"]] },
+    background: {
+      type: "gradient",
+      angleDeg: 180,
+      stops: [
+        [0, "#2193b0"],
+        [1, "#0b3d63"],
+      ],
+    },
     photoFrame: frame({ radius: 64 }),
     stickerStyle: sticker({ accent: "#2193b0" }),
     palette: { text: "#ffffff", mutedText: "#cfe9f3", accent: "#ffffff" },
@@ -118,7 +135,15 @@ export const TEMPLATES: readonly Template[] = [
     name: "Polaroid",
     isPremium: false,
     background: { type: "solid", color: "#2b2b2f" },
-    photoFrame: frame({ x: 120, y: 330, w: 840, h: 1000, radius: 8, rotationDeg: -3, border: { width: 36, color: "#ffffff" } }),
+    photoFrame: frame({
+      x: 120,
+      y: 310,
+      w: 840,
+      h: 960,
+      radius: 8,
+      rotationDeg: -3,
+      border: { width: 36, color: "#ffffff" },
+    }),
     stickerStyle: sticker({ accent: "#ffb703" }),
     palette: { text: "#ffffff", mutedText: "#cccccc", accent: "#ffb703" },
     fontFamily: "Manrope",
@@ -128,14 +153,19 @@ export const TEMPLATES: readonly Template[] = [
     id: "neon",
     name: "Neon",
     isPremium: true,
-    background: { type: "gradient", angleDeg: 180, stops: [[0, "#0f0c29"], [1, "#24243e"]] },
+    background: {
+      type: "gradient",
+      angleDeg: 180,
+      stops: [
+        [0, "#0f0c29"],
+        [1, "#24243e"],
+      ],
+    },
     photoFrame: frame({ radius: 40, border: { width: 8, color: "#00f5d4" } }),
     stickerStyle: sticker({ fill: "#0f0c29", text: "#00f5d4", accent: "#f15bb5" }),
     palette: { text: "#00f5d4", mutedText: "#9b8cff", accent: "#f15bb5" },
-    fontFamily: "Space Grotesk",
-    decorations: [
-      { kind: "glow", x: 540, y: 830, r: 700, color: "rgba(241,91,181,0.18)" },
-    ],
+    fontFamily: "Unbounded",
+    decorations: [{ kind: "glow", x: 540, y: 830, r: 700, color: "rgba(241,91,181,0.18)" }],
   },
   {
     id: "film-strip",
@@ -145,7 +175,7 @@ export const TEMPLATES: readonly Template[] = [
     photoFrame: frame({ x: 150, w: 780, radius: 4 }),
     stickerStyle: sticker({ accent: "#ffcc00" }),
     palette: { text: "#ffffff", mutedText: "#bbbbbb", accent: "#ffcc00" },
-    fontFamily: "Bebas Neue",
+    fontFamily: "Oswald",
     decorations: [
       { kind: "filmHoles", side: "left", color: "#f4f1ea" },
       { kind: "filmHoles", side: "right", color: "#f4f1ea" },
@@ -155,7 +185,15 @@ export const TEMPLATES: readonly Template[] = [
     id: "aurora",
     name: "Aurora",
     isPremium: true,
-    background: { type: "gradient", angleDeg: 135, stops: [[0, "#00c9ff"], [0.5, "#7b2ff7"], [1, "#f107a3"]] },
+    background: {
+      type: "gradient",
+      angleDeg: 135,
+      stops: [
+        [0, "#00c9ff"],
+        [0.5, "#7b2ff7"],
+        [1, "#f107a3"],
+      ],
+    },
     photoFrame: frame({ radius: 120 }),
     stickerStyle: sticker({ accent: "#7b2ff7" }),
     palette: { text: "#ffffff", mutedText: "#f1d9ff", accent: "#ffffff" },
@@ -171,7 +209,7 @@ export const TEMPLATES: readonly Template[] = [
     stickerStyle: sticker({ fill: "#ee4266", text: "#ffffff", accent: "#111111" }),
     palette: { text: "#111111", mutedText: "#3b3b3b", accent: "#ee4266" },
     fontFamily: "Pacifico",
-    decorations: [{ kind: "rect", x: 60, y: 300, w: 960, h: 1060, color: "#111111", radius: 36 }],
+    decorations: [{ kind: "rect", x: 60, y: 280, w: 960, h: 1020, color: "#111111", radius: 36 }],
   },
 ];
 
@@ -180,4 +218,16 @@ export function getTemplate(id: string): Template | undefined {
 }
 
 export const FREE_FONTS = ["Inter", "Manrope"] as const;
-export const PREMIUM_FONTS = ["Space Grotesk", "Bebas Neue", "Playfair Display", "Pacifico"] as const;
+export const PREMIUM_FONTS = ["Unbounded", "Oswald", "Playfair Display", "Pacifico"] as const;
+export const ALL_FONTS: readonly string[] = [...FREE_FONTS, ...PREMIUM_FONTS];
+/** Weight self-hosted for each family (one weight per family keeps the bundle small). */
+export const FONT_WEIGHTS: Record<string, number> = {
+  Inter: 700,
+  Manrope: 700,
+  Unbounded: 700,
+  Oswald: 700,
+  "Playfair Display": 700,
+  Pacifico: 400,
+};
+export const isPremiumFont = (f: string): boolean =>
+  (PREMIUM_FONTS as readonly string[]).includes(f);

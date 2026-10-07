@@ -29,6 +29,14 @@ pnpm dev               # open http://localhost:5173
 - Safety: the API refuses `DEV_MODE=true` with `NODE_ENV=production`; `vite build` fails if `VITE_DEV_MOCK=true`;
   the mock code is not part of production bundles.
 
+## Card editor
+
+`/chain/:id/join` opens the editor: pick/take a photo, pan/pinch/scroll to frame it, choose a template and font
+(PRO items are badged and open the paywall), add an optional caption and publish. The client renders the
+1080x1920 JPEG on a native canvas (`apps/web/src/editor/renderCard.ts`) and uploads it; free users get the
+watermark added **server-side**. Templates live in `packages/shared/src/templates.ts` (data, not code);
+fonts in `apps/web/public/fonts` (OFL, see `LICENSES.txt`).
+
 ## Tests
 
 ```bash

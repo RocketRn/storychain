@@ -147,12 +147,13 @@ export function registerChainRoutes(app: FastifyInstance, deps: Deps): void {
       const chain = await visibleChain(req.params.id);
       const mine = await db.post.findUnique({
         where: { chainId_userId: { chainId: chain.id, userId: me.id } },
-        select: { id: true },
+        select: { position: true },
       });
       return {
         chain: toChainDTO(chain),
         posts: await postsPage(chain.id, undefined, me.id),
         hasJoined: !!mine,
+        myPosition: mine?.position ?? null,
       };
     },
   );

@@ -60,6 +60,8 @@ export interface ChainDetailDTO {
   chain: ChainDTO;
   posts: Page<PostDTO>;
   hasJoined: boolean;
+  /** position of the viewer's post in this chain (kept when re-posting), null if not joined */
+  myPosition: number | null;
 }
 
 export interface CreatePostResultDTO {

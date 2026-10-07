@@ -15,7 +15,8 @@ describe("toUnits", () => {
     expect(() => toUnits("1.0000000001", 9)).toThrow();
   });
   it("rejects garbage", () => {
-    for (const bad of ["", "abc", "-1", "1e3", "1.", ".5", "1,5"]) expect(() => toUnits(bad, 9)).toThrow();
+    for (const bad of ["", "abc", "-1", "1e3", "1.", ".5", "1,5"])
+      expect(() => toUnits(bad, 9)).toThrow();
   });
   it("works with 0 decimals", () => expect(toUnits("150", 0)).toBe(150n));
 });

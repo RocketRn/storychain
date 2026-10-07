@@ -141,6 +141,42 @@ describe("joining chains", () => {
     expect(ok.statusCode).toBe(201);
   });
 
+  it("rejects premium fonts for non-PRO", async () => {
+    const [free, pro] = [newTgId(), newTgId()];
+    await makePro(pro);
+    const chain = await createChain(ctx, free);
+    const img = await solidImage();
+    const denied = await postImage(ctx, free, chain, img, {
+      templateId: "sunset",
+      fontFamily: "Pacifico",
+    });
+    expect(denied.statusCode).toBe(402);
+    expect(denied.json().error.code).toBe("PRO_REQUIRED");
+    expect(
+      (await postImage(ctx, free, chain, img, { templateId: "sunset", fontFamily: "Manrope" }))
+        .statusCode,
+    ).toBe(201);
+    expect(
+      (await postImage(ctx, pro, chain, img, { templateId: "sunset", fontFamily: "Pacifico" }))
+        .statusCode,
+    ).toBe(201);
+  });
+
+  it("exposes myPosition for re-posting", async () => {
+    const a = newTgId();
+    const chain = await createChain(ctx, a);
+    const before = (
+      await ctx.app.inject({ url: `/api/chains/${chain}`, headers: authHeader(a) })
+    ).json();
+    expect(before.myPosition).toBeNull();
+    await postImage(ctx, newTgId(), chain, await solidImage());
+    await postImage(ctx, a, chain, await solidImage());
+    const after = (
+      await ctx.app.inject({ url: `/api/chains/${chain}`, headers: authHeader(a) })
+    ).json();
+    expect(after.myPosition).toBe(2);
+  });
+
   it("PRO has no daily limit", async () => {
     const pro = newTgId();
     await makePro(pro);

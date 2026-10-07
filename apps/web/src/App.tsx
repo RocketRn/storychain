@@ -8,6 +8,9 @@ import { Home } from "./screens/Home";
 import { ChainScreen } from "./screens/Chain";
 import { CreateChain } from "./screens/CreateChain";
 import { Placeholder } from "./screens/Placeholder";
+
+// The editor (canvas, fonts, templates) is code-split: it is only needed when joining a chain
+const Editor = lazy(() => import("./screens/Editor"));
 import { EmptyState, Skeleton } from "./components/ui";
 import { useBackButton } from "./hooks/useTgButtons";
 import { useSession } from "./lib/queries";
@@ -57,7 +60,14 @@ function Shell() {
           <Route path="/" element={<Home />} />
           <Route path="/create" element={<CreateChain />} />
           <Route path="/chain/:id" element={<ChainScreen />} />
-          <Route path="/chain/:id/join" element={<Placeholder />} />
+          <Route
+            path="/chain/:id/join"
+            element={
+              <Suspense fallback={<Skeleton className="m-4 h-64" />}>
+                <Editor />
+              </Suspense>
+            }
+          />
           <Route path="/pro" element={<Placeholder emoji="⭐" />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

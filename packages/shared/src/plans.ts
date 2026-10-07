@@ -25,7 +25,10 @@ export type Platform = "ios" | "android" | "tdesktop" | "macos" | "weba" | "web"
  * Telegram requires Stars for digital goods in app-store builds (ios/android).
  * Owner must verify against current Telegram rules (see DECISIONS.md).
  */
-export function allowedMethods(platform: string | undefined, allPlatforms: boolean): PaymentProvider[] {
+export function allowedMethods(
+  platform: string | undefined,
+  allPlatforms: boolean,
+): PaymentProvider[] {
   if (allPlatforms) return ["stars", "ton_grm"];
   return platform === "ios" || platform === "android" ? ["stars"] : ["stars", "ton_grm"];
 }

@@ -30,3 +30,14 @@ One line per decision: decision — reason.
 - API base in the web app is same-origin `/api` (Vite proxy in dev, Fastify single-origin in prod); `VITE_API_URL` is optional.
 - E2E uses its own SQLite file + upload dir, API on :3100 and web on :5273 (single origin via the Vite proxy), recreated on every run. The sandbox's preinstalled Chromium is used via `executablePath` (override with `PW_CHROMIUM`).
 - Seed removes the demo users' DailyUsage rows so seeding never consumes their daily quota.
+- Fonts: 6 self-hosted OFL families from @fontsource (latin + cyrillic subsets, one weight each; files + license texts in `apps/web/public/fonts`). Free: Inter, Manrope. Premium: Unbounded, Oswald, Playfair Display, Pacifico. Chosen because all cover Cyrillic — Bebas Neue / Space Grotesk (first draft) do not, and canvas would silently fall back for Russian titles.
+- `document.fonts.load(font, sampleText)` is awaited with the real text before any drawing so the right unicode-range subset is fetched.
+- Server enforces premium templates AND premium fonts (client sends the optional `fontFamily` form field; premium font + non-PRO -> `PRO_REQUIRED`). The font is not stored; it only gates the request since the card is rendered client-side.
+- Editor step 1 ("pick/create chain") happens on Home/Chain/Create screens; the editor opens with the chain already chosen and shows it in its header. Steps in the editor: Photo -> Style (pan/zoom + template/font picker) -> Publish (preview + caption).
+- "#N" badge and participants counter both use `myPosition ?? postsCount + 1` (API returns `myPosition` so re-posting keeps the same number).
+- Live preview is a 540x960 canvas drawn with the same `drawCard` as the export (scale 0.5); the free-user watermark is a DOM overlay positioned like the server's (bottom-right, 220px above the bottom edge).
+- Export: JPEG q0.9, lowered stepwise (0.82/0.74/0.66) only if the blob exceeds 3 MB. Photos > 2560px on the longest side are downscaled right after decoding (EXIF handled by `createImageBitmap({imageOrientation:"from-image"})`).
+- Pan/zoom model: `View = {zoom>=1, cx, cy}` (normalized source center) so the photo can never leave the frame; drag, pinch, wheel and a zoom slider (accessible) all go through the same pure helpers in `editor/layout.ts` (unit tested). Frame rotation (±3° on two templates) is ignored for drag math.
+- The Editor chunk (canvas, fonts CSS, templates UI) is lazy-loaded; a test hook (`window.__storychain.render`) exists only when `VITE_DEV_MOCK=true`.
+- Playwright sample photos are generated with `sharp` (root devDependency) so EXIF-rotated JPEGs can be produced deterministically.
+- Known: main bundle is ~150 kB gzip (react-router, react-query, zod via shared); TonConnect will be code-split in Phase 5; further bundle work is in Phase 6.

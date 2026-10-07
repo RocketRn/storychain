@@ -24,6 +24,8 @@ export const listPostsQuerySchema = z.object({
 export const createPostFieldsSchema = z.object({
   templateId: z.string().min(1).max(64),
   caption: z.string().trim().max(200).optional(),
+  /** Font used on the card (premium fonts require PRO; the card itself is rendered client-side). */
+  fontFamily: z.string().max(40).optional(),
 });
 export type CreatePostFields = z.infer<typeof createPostFieldsSchema>;
 
@@ -42,7 +44,11 @@ export function parseStartParam(sp: string | undefined | null): string | null {
   return m?.[1] ?? null;
 }
 
-export function buildShareLink(opts: { botUsername: string; appShortName?: string; chainId: string }): string {
+export function buildShareLink(opts: {
+  botUsername: string;
+  appShortName?: string;
+  chainId: string;
+}): string {
   const path = opts.appShortName ? `${opts.botUsername}/${opts.appShortName}` : opts.botUsername;
   return `https://t.me/${path}?startapp=chain_${opts.chainId}`;
 }
