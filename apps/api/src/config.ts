@@ -52,7 +52,9 @@ const schema = z.object({
 
 export type Config = ReturnType<typeof loadConfig>;
 
-export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
+export function loadConfig(rawEnv: NodeJS.ProcessEnv = process.env) {
+  // `KEY=` in a .env file means "not set": fall back to the default instead of failing validation
+  const env = Object.fromEntries(Object.entries(rawEnv).filter(([, v]) => v !== ""));
   const e = schema.parse(env);
   const devMode = e.DEV_MODE === "true";
   const isProd = e.NODE_ENV === "production";
