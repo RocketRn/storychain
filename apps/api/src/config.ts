@@ -14,6 +14,8 @@ const schema = z.object({
   WEB_DIST_DIR: z.string().default(""),
   /** Behind a reverse proxy / tunnel: trust X-Forwarded-* so rate limits see the real client IP */
   TRUST_PROXY: bool,
+  /** DEV_MODE exposes /api/dev/* and a public signing key: it is refused on non-local URLs unless this is set */
+  ALLOW_REMOTE_DEV_MODE: bool,
   /** How long Telegram initData is accepted after its auth_date (seconds) */
   INITDATA_MAX_AGE_SEC: z.coerce
     .number()
@@ -74,6 +76,18 @@ const schema = z.object({
 
 export type Config = ReturnType<typeof loadConfig>;
 
+/** What a BotFather token looks like: `<bot id>:<35 url-safe chars>`. The shipped placeholders do not match. */
+const BOT_TOKEN_SHAPE = /^\d{5,}:[A-Za-z0-9_-]{30,}$/;
+const LOCAL_HOSTNAME = /^(localhost|127\.0\.0\.1|\[::1\]|[^.]+\.localhost)$/i;
+
+function isLocalUrl(url: string): boolean {
+  try {
+    return LOCAL_HOSTNAME.test(new URL(url).hostname);
+  } catch {
+    return false;
+  }
+}
+
 export function loadConfig(rawEnv: NodeJS.ProcessEnv = process.env) {
   // `KEY=` in a .env file means "not set": fall back to the default instead of failing validation
   const env = Object.fromEntries(Object.entries(rawEnv).filter(([, v]) => v !== ""));
@@ -83,6 +97,21 @@ export function loadConfig(rawEnv: NodeJS.ProcessEnv = process.env) {
   if (devMode && inProduction) {
     throw new Error("Refusing to start: DEV_MODE=true is not allowed with NODE_ENV=production");
   }
+  // Mock mode has dev-only endpoints that mint valid initData, and a placeholder bot token whose HMAC key is
+  // public. That is fine on a laptop and catastrophic on a public host that merely forgot NODE_ENV=production.
+  if (devMode && e.NODE_ENV !== "test" && e.ALLOW_REMOTE_DEV_MODE !== "true") {
+    for (const [key, value] of [
+      ["WEBAPP_URL", e.WEBAPP_URL],
+      ["PUBLIC_BASE_URL", e.PUBLIC_BASE_URL],
+    ] as const) {
+      if (!isLocalUrl(value)) {
+        throw new Error(
+          `Refusing to start: DEV_MODE=true enables unauthenticated /api/dev/* endpoints, but ${key} (${value}) is not a local address. Use DEV_MODE=false for anything reachable from outside, or set ALLOW_REMOTE_DEV_MODE=true to override.`,
+        );
+      }
+    }
+  }
+  const botEnabled = (e.BOT_ENABLED ?? (inProduction ? "true" : "false")) === "true";
   if (inProduction) {
     const missing: string[] = [];
     const required: Array<keyof typeof e> = [
@@ -112,6 +141,22 @@ export function loadConfig(rawEnv: NodeJS.ProcessEnv = process.env) {
       throw new Error(`Missing required env in production: ${missing.join(", ")}`);
     if (!e.PUBLIC_BASE_URL.startsWith("https://")) {
       throw new Error("PUBLIC_BASE_URL must be a public HTTPS URL in production");
+    }
+    // Telegram only opens https web_app buttons and wallets only fetch an https TonConnect manifest
+    for (const k of ["WEBAPP_URL", "TONCONNECT_MANIFEST_URL"] as const) {
+      if (!e[k].startsWith("https://")) throw new Error(`${k} must be an HTTPS URL in production`);
+    }
+    // initData is verified with an HMAC keyed by the bot token: a placeholder token means anyone can forge logins
+    if (!BOT_TOKEN_SHAPE.test(e.BOT_TOKEN)) {
+      throw new Error(
+        "BOT_TOKEN does not look like a BotFather token (<id>:<35 characters>). Refusing to start with a placeholder: its signing key would be public.",
+      );
+    }
+  }
+  // An update endpoint without a secret would let anyone forge Telegram updates, including successful_payment
+  if (botEnabled && e.BOT_MODE === "webhook") {
+    for (const k of ["WEBHOOK_URL", "WEBHOOK_SECRET"] as const) {
+      if (!e[k]) throw new Error(`BOT_MODE=webhook requires ${k}`);
     }
   }
   const grmHuman: Record<BoostPlanId, string> = {
@@ -145,7 +190,7 @@ export function loadConfig(rawEnv: NodeJS.ProcessEnv = process.env) {
     botUsername: e.BOT_USERNAME,
     appShortName: e.APP_SHORT_NAME,
     // The bot is started only when explicitly enabled (default: on in production, off in dev/mock)
-    botEnabled: (e.BOT_ENABLED ?? (inProduction ? "true" : "false")) === "true",
+    botEnabled,
     botMode: e.BOT_MODE,
     webhookUrl: e.WEBHOOK_URL,
     webhookSecret: e.WEBHOOK_SECRET,

@@ -1,6 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { loadConfig } from "../src/config";
 
+const PROD = {
+  NODE_ENV: "production",
+  BOT_TOKEN: "123456789:AAH_test_token_for_unit_tests_01234",
+  BOT_USERNAME: "storychain_bot",
+  TON_MERCHANT_ADDRESS: "UQBvW8Z5huBkMJYdnfAEM5JqTNkuWX3diqYENkWsIL0XggGG",
+  TONAPI_KEY: "key",
+  TONCONNECT_MANIFEST_URL: "https://app.example.com/tonconnect-manifest.json",
+  WEBAPP_URL: "https://app.example.com",
+  PUBLIC_BASE_URL: "https://api.example.com",
+};
+const prod = (extra: Record<string, string> = {}) =>
+  loadConfig({ ...PROD, ...extra } as NodeJS.ProcessEnv);
+
 describe("config", () => {
   it("refuses DEV_MODE=true in production", () => {
     expect(() =>
@@ -69,5 +82,74 @@ describe("config", () => {
       /GRM_BOOST_7D_PRICE/,
     );
     expect(() => loadConfig({ BOOST_MAX_HORIZON_DAYS: "0" } as NodeJS.ProcessEnv)).toThrow();
+  });
+
+  describe("hardening", () => {
+    it("accepts a complete production env", () => {
+      expect(prod().inProduction).toBe(true);
+    });
+
+    it("refuses placeholder or malformed bot tokens in production (their HMAC key would be public)", () => {
+      for (const BOT_TOKEN of [
+        "000000:dev-token-change-me", // .env.example
+        "123456:test-bot-token",
+        "not-a-token",
+        "123456789:short",
+        "123456789:AAH test token with spaces 0123456789",
+      ]) {
+        expect(() => prod({ BOT_TOKEN }), BOT_TOKEN).toThrow(/BOT_TOKEN/);
+      }
+    });
+
+    it("requires https for the Mini App and the TonConnect manifest in production", () => {
+      expect(() => prod({ WEBAPP_URL: "http://app.example.com" })).toThrow(/WEBAPP_URL/);
+      expect(() => prod({ TONCONNECT_MANIFEST_URL: "http://app.example.com/m.json" })).toThrow(
+        /TONCONNECT_MANIFEST_URL/,
+      );
+    });
+
+    it("refuses DEV_MODE on a non-local address unless explicitly overridden", () => {
+      const dev = (extra: Record<string, string>) =>
+        loadConfig({ NODE_ENV: "development", DEV_MODE: "true", ...extra } as NodeJS.ProcessEnv);
+      expect(() => dev({ PUBLIC_BASE_URL: "https://api.example.com" })).toThrow(/PUBLIC_BASE_URL/);
+      expect(() => dev({ WEBAPP_URL: "https://xyz.trycloudflare.com" })).toThrow(/WEBAPP_URL/);
+      expect(() => dev({ PUBLIC_BASE_URL: "http://localhost.evil.com" })).toThrow(/DEV_MODE/);
+      // a host that merely starts with "localhost" or contains it as a label is not local
+      expect(() => dev({ PUBLIC_BASE_URL: "http://127.0.0.1.nip.io:3000" })).toThrow(/DEV_MODE/);
+      // the real local spellings keep working
+      for (const url of [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://[::1]:3000",
+        "http://app.localhost:3000",
+      ]) {
+        expect(() => dev({ PUBLIC_BASE_URL: url, WEBAPP_URL: url }), url).not.toThrow();
+      }
+      // explicit opt-in, and the test environment (fake hosts) is exempt
+      expect(() =>
+        dev({ PUBLIC_BASE_URL: "https://api.example.com", ALLOW_REMOTE_DEV_MODE: "true" }),
+      ).not.toThrow();
+      expect(() =>
+        loadConfig({
+          NODE_ENV: "test",
+          DEV_MODE: "true",
+          PUBLIC_BASE_URL: "http://test.local",
+        } as NodeJS.ProcessEnv),
+      ).not.toThrow();
+    });
+
+    it("webhook mode needs a secret and a URL whenever the bot is enabled (any environment)", () => {
+      const hook = (extra: Record<string, string>) =>
+        loadConfig({ BOT_ENABLED: "true", BOT_MODE: "webhook", ...extra } as NodeJS.ProcessEnv);
+      expect(() => hook({ WEBHOOK_URL: "https://api.example.com/hook" })).toThrow(/WEBHOOK_SECRET/);
+      expect(() => hook({ WEBHOOK_SECRET: "s3cret" })).toThrow(/WEBHOOK_URL/);
+      expect(() =>
+        hook({ WEBHOOK_URL: "https://api.example.com/hook", WEBHOOK_SECRET: "s3cret" }),
+      ).not.toThrow();
+      // bot off: nothing is exposed, nothing is required
+      expect(() =>
+        loadConfig({ BOT_ENABLED: "false", BOT_MODE: "webhook" } as NodeJS.ProcessEnv),
+      ).not.toThrow();
+    });
   });
 });

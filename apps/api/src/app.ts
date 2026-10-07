@@ -191,6 +191,11 @@ export async function buildApp(deps: Deps): Promise<FastifyInstance> {
   registerPaymentRoutes(app, deps);
   if (config.devMode && !config.inProduction) registerDevRoutes(app, deps);
   if (deps.bot && config.botMode === "webhook") {
+    if (!config.webhookSecret) {
+      throw new Error(
+        "BOT_MODE=webhook requires WEBHOOK_SECRET: refusing an unauthenticated update endpoint",
+      );
+    }
     // grammY verifies the X-Telegram-Bot-Api-Secret-Token header against `secretToken`
     app.post(
       "/api/telegram/webhook",

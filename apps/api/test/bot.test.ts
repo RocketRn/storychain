@@ -156,6 +156,16 @@ describe("webhook endpoint", () => {
     expect(calls.some((c) => c.method === "sendMessage")).toBe(true);
   });
 
+  it("refuses to start an update endpoint without a secret token", async () => {
+    const open = env({
+      BOT_MODE: "webhook",
+      WEBHOOK_URL: "https://api.example.com/api/telegram/webhook",
+    });
+    await expect(buildApp({ config: open, db, storage: new MemoryStorage(), bot })).rejects.toThrow(
+      /WEBHOOK_SECRET/,
+    );
+  });
+
   it("is not registered in polling mode", async () => {
     const poll = await buildApp({ config: env(), db, storage: new MemoryStorage(), bot });
     const res = await poll.inject({ method: "POST", url: "/api/telegram/webhook", payload: {} });
