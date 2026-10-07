@@ -112,8 +112,9 @@ statistics (`ANALYZE`): a fresh production SQLite has none. "After" is the same 
 - **Dev-time advisories left** (no upstream fix, nothing ships): `deepmerge-ts` in the Prisma CLI config loader, `braces` and
   `postcss-selector-parser` inside Tailwind 3. Re-run `pnpm audit` when Prisma / Tailwind move.
 - **CSP** keeps `style-src 'unsafe-inline'` (React emits inline style attributes); `script-src` is strict.
-- **No CI** is configured in the repository; the gate (`pnpm lint && pnpm typecheck && pnpm test && pnpm build`, plus
-  `pnpm e2e` and `pnpm smoke`) is run by hand.
+- **CI** (`.github/workflows/ci.yml`) runs lint, typecheck, unit tests, build and a production `pnpm audit` on every push and
+  pull request. It has not been run on GitHub yet, and it deliberately leaves out `pnpm e2e` / `pnpm smoke` (browser setup
+  could not be validated here): run those by hand before a release.
 
 ## Reproducing the measurements
 
