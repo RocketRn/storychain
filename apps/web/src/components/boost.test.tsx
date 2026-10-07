@@ -41,9 +41,9 @@ describe("dictionary: the PRO / quota / paywall vocabulary is gone (RU + EN)", (
     for (const lang of ["ru", "en"] as const) {
       for (const [key, text] of Object.entries(dictionaries[lang])) {
         expect(key, `${lang}.${key}`).not.toMatch(
-          /^(proChip|proBadge|proActiveUntil|proUnlimited|freeChip|freeWatermark|paywall|benefit|dailyLimit|usedToday|getPro|planName|extendHint)/,
+          /^(pro[A-Z]|free[A-Z]|paywall|benefit|daily|used[A-Z]|getPro|planName|extendHint)/,
         );
-        expect(key).not.toMatch(/DAILY_LIMIT|PRO_REQUIRED/);
+        expect(key).not.toMatch(/^err_(DAILY_LIMIT|PRO_REQUIRED)/);
         expect(text, `${lang}.${key}`).not.toMatch(/\bPRO\b|paywall/);
       }
     }

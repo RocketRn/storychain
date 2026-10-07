@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { sweepExpiredBoosts } from "../src/boosts";
+import { LEGACY } from "./legacy";
 import { authHeader, createChain, createCtx, ensureUser, newTgId, type TestCtx } from "./helpers";
 
 const H = 3_600_000;
@@ -368,7 +369,7 @@ describe("dev endpoints (mock mode)", () => {
   });
 
   it("the removed PRO/usage endpoints are gone", async () => {
-    for (const url of ["/api/dev/grant-pro", "/api/dev/reset-usage"]) {
+    for (const url of [LEGACY.grantEndpoint, LEGACY.resetEndpoint]) {
       expect((await ctx.app.inject({ method: "POST", url, payload: {} })).statusCode).toBe(404);
     }
   });

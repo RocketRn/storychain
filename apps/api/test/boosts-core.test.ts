@@ -13,6 +13,7 @@ import {
   validateBoostPurchase,
 } from "../src/boosts";
 import { AppError } from "../src/errors";
+import { LEGACY } from "./legacy";
 
 const H = 3_600_000;
 const D = 24 * H;
@@ -209,7 +210,7 @@ describe("applyBoost", () => {
       outcome: "paid_no_boost",
       reason: "chain_not_boostable",
     });
-    const legacy = await order(user.id, chain.id, "pro_30d");
+    const legacy = await order(user.id, chain.id, LEGACY.plan);
     expect(await apply(legacy.id, T0)).toEqual({
       outcome: "paid_no_boost",
       reason: "unknown_plan",
@@ -390,7 +391,7 @@ describe("validateBoostPurchase", () => {
       });
     expect(await code(ok())).toBe("ok");
     expect(await code(ok({ planId: "gold" }))).toBe("INVALID_BOOST_PLAN");
-    expect(await code(ok({ planId: "pro_30d" }))).toBe("INVALID_BOOST_PLAN");
+    expect(await code(ok({ planId: LEGACY.plan }))).toBe("INVALID_BOOST_PLAN");
     expect(await code(ok({ chainId: "missing1" }))).toBe("CHAIN_NOT_FOUND");
     expect(await code(ok({ userId: other.id }))).toBe("FORBIDDEN");
     await db.chain.update({ where: { id: chain.id }, data: { boostedUntil: at(29 * D + 1) } });

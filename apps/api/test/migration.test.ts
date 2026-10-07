@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { PrismaClient } from "@prisma/client";
+import { LEGACY } from "./legacy";
 
 // Node's built-in SQLite (no CLI needed). Loaded through require so the bundler leaves "node:sqlite" alone.
 interface Sqlite {
@@ -41,7 +42,7 @@ describe("boosts_pivot migration", () => {
 
     // a legacy world: a PRO user with a paid and a pending PRO order, plus a chain, a post and usage rows
     db.exec(
-      `INSERT INTO "User"(id,telegramId,firstName,proUntil) VALUES ('u1',1,'Old', 4102444800000)`,
+      `INSERT INTO "User"(id,telegramId,firstName,${LEGACY.userColumn}) VALUES ('u1',1,'Old', 4102444800000)`,
     );
     db.exec(`INSERT INTO "Chain"(id,title,creatorId) VALUES ('chain001','Old chain','u1')`);
     db.exec(
@@ -51,10 +52,12 @@ describe("boosts_pivot migration", () => {
       db.exec(
         `INSERT INTO "Transaction"(id,userId,provider,planId,status,amount,currency,reference,expiresAt) VALUES ('${id}','u1','stars','${plan}','${status}','150','XTR','${ref}',4102444800000)`,
       );
-    tx("t_pending", "pending", "pro_30d", "ref-pending");
-    tx("t_paid", "paid", "pro_30d", "ref-paid");
+    tx("t_pending", "pending", LEGACY.plan, "ref-pending");
+    tx("t_paid", "paid", LEGACY.plan, "ref-paid");
     tx("t_other", "pending", "boost_24h", "ref-other"); // not a legacy plan: untouched
-    db.exec(`INSERT INTO "DailyUsage"(id,userId,day,count) VALUES ('d1','u1','2026-01-01',3)`);
+    db.exec(
+      `INSERT INTO "${LEGACY.usageTable}"(id,userId,day,count) VALUES ('d1','u1','2026-01-01',3)`,
+    );
     expect(one(`SELECT status FROM "Transaction" WHERE id='t_pending'`)).toBe("pending"); // sanity: really legacy
 
     db.exec(sqlOf(pivot)); // the migration under test
@@ -62,7 +65,7 @@ describe("boosts_pivot migration", () => {
     expect(one(`SELECT status FROM "Transaction" WHERE id='t_pending'`)).toBe("expired");
     expect(one(`SELECT status FROM "Transaction" WHERE id='t_paid'`)).toBe("paid");
     expect(one(`SELECT status FROM "Transaction" WHERE id='t_other'`)).toBe("pending");
-    expect(one(`SELECT planId FROM "Transaction" WHERE id='t_paid'`)).toBe("pro_30d"); // history kept as is
+    expect(one(`SELECT planId FROM "Transaction" WHERE id='t_paid'`)).toBe(LEGACY.plan); // history kept as is
     expect(one(`SELECT count(*) FROM "User"`)).toBe("1");
     expect(one(`SELECT count(*) FROM "Post"`)).toBe("1");
     expect(
@@ -70,9 +73,11 @@ describe("boosts_pivot migration", () => {
     ).toBe("Old chain|0|1");
     expect(one(`SELECT chainId IS NULL FROM "Transaction" WHERE id='t_paid'`)).toBe("1"); // legacy rows: nullable chainId
     const userCols = all(`SELECT name FROM pragma_table_info('User')`).map((r) => r.name);
-    expect(userCols).not.toContain("proUntil");
+    expect(userCols).not.toContain(LEGACY.userColumn);
     expect(
-      one(`SELECT count(*) FROM sqlite_master WHERE name IN ('DailyUsage','Subscription')`),
+      one(
+        `SELECT count(*) FROM sqlite_master WHERE name IN ('${LEGACY.usageTable}','${LEGACY.subscriptionTable}')`,
+      ),
     ).toBe("0");
     expect(one(`SELECT count(*) FROM sqlite_master WHERE name='ChainBoost'`)).toBe("1");
     expect(
@@ -87,7 +92,7 @@ describe("boosts_pivot migration", () => {
       db.prepare(`SELECT id,status FROM "Transaction" ORDER BY id`).all(),
     );
     db.exec(
-      `UPDATE "Transaction" SET "status" = 'expired' WHERE "status" = 'pending' AND "planId" = 'pro_30d';`,
+      `UPDATE "Transaction" SET "status" = 'expired' WHERE "status" = 'pending' AND "planId" = '${LEGACY.plan}';`,
     );
     expect(
       JSON.stringify(db.prepare(`SELECT id,status FROM "Transaction" ORDER BY id`).all()),

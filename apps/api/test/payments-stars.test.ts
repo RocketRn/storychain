@@ -11,6 +11,7 @@ import {
   type CreateInvoiceLink,
   type InvoiceLinkArgs,
 } from "../src/payments/stars";
+import { LEGACY } from "./legacy";
 import { authHeader, createChain, createCtx, ensureUser, newTgId, type TestCtx } from "./helpers";
 
 const H = 3_600_000;
@@ -131,7 +132,7 @@ describe("POST /api/payments/stars/invoice", () => {
     await ensureUser(ctx, other);
     const code = async (r: ReturnType<typeof invoice>) => (await r).json().error?.code;
     expect(await code(invoice(tgId, { chainId, planId: "gold" }))).toBe("INVALID_BOOST_PLAN");
-    expect(await code(invoice(tgId, { chainId, planId: "pro_30d" }))).toBe("INVALID_BOOST_PLAN");
+    expect(await code(invoice(tgId, { chainId, planId: LEGACY.plan }))).toBe("INVALID_BOOST_PLAN");
     expect(await code(invoice(tgId, { chainId: "nope1234", planId: "boost_24h" }))).toBe(
       "CHAIN_NOT_FOUND",
     );
@@ -266,7 +267,7 @@ describe("pre_checkout validation", () => {
     });
     expect((await check(far.tgId, far.tx.reference, { total_amount: 500 })).ok).toBe(false);
 
-    const badPlan = await pendingOrder("pro_30d");
+    const badPlan = await pendingOrder(LEGACY.plan);
     expect((await check(badPlan.tgId, badPlan.tx.reference)).ok).toBe(false);
   });
 });
@@ -543,7 +544,7 @@ describe("ledger idempotency & stacking math", () => {
   });
 
   it("a legacy PRO order paid late is received but grants nothing", async () => {
-    const a = await pendingOrder("pro_30d", "150");
+    const a = await pendingOrder(LEGACY.plan, "150");
     const r = await handleSuccessfulPayment(
       ctx.db,
       a.tgId,

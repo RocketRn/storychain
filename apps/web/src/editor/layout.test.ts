@@ -150,7 +150,8 @@ describe("templates data", () => {
   it("ships 8 templates with unique ids and NO premium/locked flag at all", () => {
     expect(TEMPLATES.length).toBeGreaterThanOrEqual(8);
     expect(new Set(TEMPLATES.map((t) => t.id)).size).toBe(TEMPLATES.length);
-    for (const t of TEMPLATES) expect(Object.keys(t)).not.toContain("isPremium");
+    for (const t of TEMPLATES)
+      expect(Object.keys(t).filter((k) => /premium|locked|pro$/i.test(k))).toEqual([]);
   });
   it("ships 6 fonts, all available to everyone and all with a self-hosted weight", () => {
     expect(ALL_FONTS.length).toBeGreaterThanOrEqual(6);
