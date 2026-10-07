@@ -45,56 +45,76 @@ export class TonIndexerError extends Error {
 }
 
 const addrObj = z.object({ address: z.string() }).passthrough();
-const eventsSchema = z
+// Events and actions are validated ONE BY ONE: anyone can send GRM to the merchant address, so a single odd
+// event must never make the whole page unreadable (that would stall every pending payment behind it).
+const envelopeSchema = z.object({ events: z.array(z.unknown()) }).passthrough();
+const eventSchema = z
   .object({
-    events: z.array(
-      z
-        .object({
-          event_id: z.string(),
-          timestamp: z.number(),
-          lt: z.number().optional(),
-          in_progress: z.boolean().optional(),
-          actions: z.array(
-            z
-              .object({
-                type: z.string(),
-                status: z.string(),
-                JettonTransfer: z
-                  .object({
-                    sender: addrObj.optional(),
-                    recipient: addrObj.optional(),
-                    amount: z.string(),
-                    comment: z.string().optional(),
-                    jetton: z.object({ address: z.string() }).passthrough(),
-                  })
-                  .passthrough()
-                  .optional(),
-              })
-              .passthrough(),
-          ),
-        })
-        .passthrough(),
-    ),
+    event_id: z.string(),
+    timestamp: z.number(),
+    in_progress: z.boolean().optional(),
+    actions: z.array(z.unknown()),
+  })
+  .passthrough();
+const actionSchema = z
+  .object({
+    type: z.string(),
+    status: z.string(),
+    JettonTransfer: z
+      .object({
+        sender: addrObj.nullish(),
+        recipient: addrObj.nullish(),
+        amount: z.string(),
+        comment: z.string().nullish(),
+        jetton: z.object({ address: z.string() }).passthrough(),
+      })
+      .passthrough()
+      .optional(),
   })
   .passthrough();
 
-/** Maps TonAPI AccountEvents to transfer events. Unfinished (in_progress) events are skipped and picked up on a later poll. */
+const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null;
+
+/**
+ * Maps TonAPI AccountEvents to transfer events. Unfinished (in_progress) events are skipped and picked up on a
+ * later poll. Events / jetton actions that cannot be understood are counted in `skipped` (never thrown).
+ * `count` and `lastLt` describe the raw page, so paging decisions do not depend on what was understood.
+ */
 export function parseTonApiEvents(json: unknown): {
   events: JettonTransferEvent[];
   lastLt: number | undefined;
   count: number;
+  skipped: number;
 } {
-  const parsed = eventsSchema.parse(json);
+  const { events: raw } = envelopeSchema.parse(json);
   const out: JettonTransferEvent[] = [];
-  for (const ev of parsed.events) {
-    if (ev.in_progress) continue;
-    for (const a of ev.actions) {
-      const t = a.JettonTransfer;
-      if (a.type !== "JettonTransfer" || !t?.recipient) continue;
+  const lts: number[] = [];
+  let skipped = 0;
+  for (const item of raw) {
+    if (isObject(item) && typeof item.lt === "number") lts.push(item.lt);
+    const ev = eventSchema.safeParse(item);
+    if (!ev.success) {
+      skipped++;
+      continue;
+    }
+    if (ev.data.in_progress) continue;
+    for (const rawAction of ev.data.actions) {
+      const a = actionSchema.safeParse(rawAction);
+      if (!a.success) {
+        // only a malformed JettonTransfer matters; other action types are none of our business
+        if (isObject(rawAction) && rawAction.type === "JettonTransfer") skipped++;
+        continue;
+      }
+      const t = a.data.JettonTransfer;
+      if (a.data.type !== "JettonTransfer" || !t?.recipient) continue;
+      if (!/^\d{1,40}$/.test(t.amount)) {
+        skipped++;
+        continue;
+      }
       out.push({
-        txHash: ev.event_id,
-        timestamp: ev.timestamp,
-        success: a.status === "ok",
+        txHash: ev.data.event_id,
+        timestamp: ev.data.timestamp,
+        success: a.data.status === "ok",
         jettonMaster: t.jetton.address,
         recipient: t.recipient.address,
         ...(t.sender ? { sender: t.sender.address } : {}),
@@ -103,13 +123,16 @@ export function parseTonApiEvents(json: unknown): {
       });
     }
   }
-  const lts = parsed.events.map((e) => e.lt).filter((x): x is number => typeof x === "number");
   return {
     events: out,
     lastLt: lts.length ? Math.min(...lts) : undefined,
-    count: parsed.events.length,
+    count: raw.length,
+    skipped,
   };
 }
+
+/** Pages fetched per poll. Exported so the truncation warning can be tested. */
+export const MAX_HISTORY_PAGES = 5;
 
 /**
  * TonAPI (https://tonapi.io). Endpoints used (assumption: confirm against current TonAPI docs):
@@ -123,6 +146,8 @@ export class TonApiIndexer implements TonIndexer {
       apiKey: string;
       network: "mainnet" | "testnet";
       fetchImpl?: typeof fetch;
+      /** receives data-quality warnings (skipped events, truncated history window) */
+      logger?: { warn(o: unknown, msg?: string): void };
     },
   ) {}
 
@@ -152,18 +177,29 @@ export class TonApiIndexer implements TonIndexer {
   }) {
     const all: JettonTransferEvent[] = [];
     let beforeLt: number | undefined;
-    for (let page = 0; page < 5; page++) {
+    for (let page = 0; page < MAX_HISTORY_PAGES; page++) {
       const q = new URLSearchParams({ limit: String(args.limit) });
       if (args.since) q.set("start_date", String(args.since));
       if (beforeLt !== undefined) q.set("before_lt", String(beforeLt));
       const json = await this.get(
         `/v2/accounts/${encodeURIComponent(args.account)}/jettons/${encodeURIComponent(args.jettonMaster)}/history?${q}`,
       );
-      const { events, lastLt, count } = parseTonApiEvents(json);
+      const { events, lastLt, count, skipped } = parseTonApiEvents(json);
+      if (skipped > 0)
+        this.opts.logger?.warn(
+          { skipped, page },
+          "TonAPI: ignored events that could not be parsed",
+        );
       all.push(...events);
-      if (count < args.limit || lastLt === undefined) break;
+      if (count < args.limit || lastLt === undefined) return all; // reached the start of the window
       beforeLt = lastLt;
     }
+    // Every page was full: the oldest part of the window was never looked at. Spam to the merchant address could
+    // push a real payment out of reach, so make it visible instead of silently missing it.
+    this.opts.logger?.warn(
+      { pages: MAX_HISTORY_PAGES, limit: args.limit, since: args.since },
+      "TonAPI: history window truncated, older transfers were not examined",
+    );
     return all;
   }
 

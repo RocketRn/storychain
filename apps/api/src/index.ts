@@ -16,11 +16,15 @@ const bot = config.botEnabled ? createBot(config, { db }) : undefined;
 let indexer: TonApiIndexer | undefined;
 let verifier: TonVerifier | undefined;
 if (!config.devMode && tonPaymentsEnabled(config)) {
-  indexer = new TonApiIndexer({ apiKey: config.ton.apiKey, network: config.ton.network });
   const log = {
     info: (o: unknown, m?: string) => console.info("[ton]", m ?? "", o),
     warn: (o: unknown, m?: string) => console.warn("[ton]", m ?? "", o),
   };
+  indexer = new TonApiIndexer({
+    apiKey: config.ton.apiKey,
+    network: config.ton.network,
+    logger: log,
+  });
   await runTonStartupCheck({ config, indexer, logger: log });
   verifier = new TonVerifier({
     db,

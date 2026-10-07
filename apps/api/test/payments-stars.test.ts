@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { Bot } from "grammy";
 import type { UserFromGetMe } from "grammy/types";
 import { createBot } from "../src/bot";
@@ -286,12 +286,14 @@ describe("bot wiring (pre_checkout_query / successful_payment / refunded_payment
   } as unknown as UserFromGetMe;
   let bot: Bot;
   let failReplies = false;
+  let failRefunds = false;
   const calls: Array<{ method: string; payload: Record<string, unknown> }> = [];
   beforeAll(() => {
     bot = createBot(ctx.config, { db: ctx.db, botInfo });
     bot.api.config.use(async (_p, method, payload) => {
       calls.push({ method, payload: payload as Record<string, unknown> });
       if (failReplies && method === "sendMessage") throw new Error("bot blocked by user");
+      if (failRefunds && method === "refundStarPayment") throw new Error("CHARGE_ALREADY_REFUNDED");
       return { ok: true, result: true } as never;
     });
   });
@@ -413,6 +415,91 @@ describe("bot wiring (pre_checkout_query / successful_payment / refunded_payment
     expect(calls.filter((c) => c.method === "sendMessage").at(-1)?.payload.text).toContain(
       "refund",
     );
+  });
+
+  describe("a second, different charge for an already paid order", () => {
+    const refundCalls = () => calls.filter((c) => c.method === "refundStarPayment");
+    const lastText = () => calls.filter((c) => c.method === "sendMessage").at(-1)?.payload.text;
+
+    it("is refunded automatically, grants nothing extra and tells the user", async () => {
+      const { tgId, tx, chainId } = await pendingOrder();
+      await bot.handleUpdate(
+        message(tgId, { successful_payment: sp(tx.reference, "charge-first") }) as never,
+      );
+      const boosted = (await chainRow(chainId)).boostedUntil;
+      const before = refundCalls().length;
+      const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+      try {
+        await bot.handleUpdate(
+          message(tgId, { successful_payment: sp(tx.reference, "charge-second") }) as never,
+        );
+        expect(error.mock.calls.some((c) => String(c[0]).includes("DUPLICATE charge"))).toBe(true);
+      } finally {
+        error.mockRestore();
+      }
+      expect(refundCalls()).toHaveLength(before + 1);
+      expect(refundCalls().at(-1)?.payload).toMatchObject({
+        user_id: tgId,
+        telegram_payment_charge_id: "charge-second",
+      });
+      expect(lastText()).toBe(
+        "You paid for this boost twice. The duplicate payment has been refunded.",
+      );
+      // the order still belongs to the FIRST charge and the chain was boosted exactly once
+      const row = await ctx.db.transaction.findUniqueOrThrow({ where: { id: tx.id } });
+      expect(row).toMatchObject({ status: "paid", externalId: "charge-first" });
+      expect((await chainRow(chainId)).boostedUntil).toEqual(boosted);
+      expect(await ctx.db.chainBoost.count({ where: { chainId } })).toBe(1);
+    });
+
+    it("a redelivery of the SAME charge is not a duplicate: no refund", async () => {
+      const { tgId, tx } = await pendingOrder();
+      const upd = message(tgId, { successful_payment: sp(tx.reference, "charge-same") });
+      await bot.handleUpdate(upd as never);
+      const before = refundCalls().length;
+      await bot.handleUpdate(upd as never);
+      await bot.handleUpdate(upd as never);
+      expect(refundCalls()).toHaveLength(before);
+    });
+
+    it("tells the user (RU) and keeps going when the automatic refund itself fails", async () => {
+      const { tgId, tx, chainId } = await pendingOrder();
+      await bot.handleUpdate(
+        message(tgId, { successful_payment: sp(tx.reference, "charge-a") }, "ru") as never,
+      );
+      failRefunds = true;
+      const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+      try {
+        await bot.handleUpdate(
+          message(tgId, { successful_payment: sp(tx.reference, "charge-b") }, "ru") as never,
+        );
+        // the operator is told which charge to refund by hand
+        const failed = error.mock.calls.find((c) => String(c[0]).includes("FAILED"));
+        expect(failed?.[1]).toMatchObject({ charge: "charge-b" });
+      } finally {
+        failRefunds = false;
+        error.mockRestore();
+      }
+      expect(lastText()).toBe("Вы оплатили этот буст дважды. Мы вернём повторный платёж.");
+      expect(await ctx.db.chainBoost.count({ where: { chainId } })).toBe(1);
+    });
+
+    it("two charges arriving at the same moment: exactly one is granted, the other is a duplicate", async () => {
+      const { tgId, tx, chainId } = await pendingOrder();
+      const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+      try {
+        const rs = await Promise.all(
+          ["race-x", "race-y"].map((c) =>
+            handleSuccessfulPayment(ctx.db, tgId, sp(tx.reference, c), clock()),
+          ),
+        );
+        expect(rs.map((r) => r.outcome).sort()).toEqual(["duplicate_charge", "paid"]);
+      } finally {
+        error.mockRestore();
+      }
+      expect(await ctx.db.chainBoost.count({ where: { chainId } })).toBe(1);
+      expect((await chainRow(chainId)).boostedUntil).toEqual(new Date(nowMs + D));
+    });
   });
 
   it("refunded_payment revokes exactly that boost (idempotent)", async () => {

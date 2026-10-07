@@ -1,6 +1,6 @@
 import type { Bot } from "grammy";
 import type { BoostPlanId } from "@storychain/shared";
-import type { User } from "@prisma/client";
+import type { Transaction, User } from "@prisma/client";
 import { assertBoostHorizon } from "../boosts/core";
 import { parsePlan, validateBoostPurchase } from "../boosts/purchase";
 import type { Config } from "../config";
@@ -71,11 +71,12 @@ export async function createStarsInvoice(args: {
   planId: string;
   now?: Date;
 }): Promise<{ invoiceUrl: string; reference: string; chainId: string; planId: string }> {
+  const at = args.now ?? new Date();
   const { chain, planId } = await validateBoostPurchase(args.db, args.config, {
     chainId: args.chainId,
     planId: args.planId,
     userId: args.user.id,
-    now: args.now ?? new Date(),
+    now: at,
   });
   if (!args.create) throw errors.methodUnavailable();
   const ru = !args.user.languageCode?.toLowerCase().startsWith("en");
@@ -87,7 +88,7 @@ export async function createStarsInvoice(args: {
     chainId: chain.id,
     amount: String(amount),
     currency: "XTR",
-    expiresAt: new Date(Date.now() + STARS_INVOICE_TTL_MS),
+    expiresAt: new Date(at.getTime() + STARS_INVOICE_TTL_MS),
   });
   const invoiceUrl = await args.create({
     title: invoiceTitle(chain.title, planId, ru),
@@ -156,6 +157,13 @@ export interface SuccessfulPayment {
 }
 
 /**
+ * `duplicate_charge`: the order was already paid by a DIFFERENT charge (e.g. the invoice was open in two
+ * clients and both went through). The second charge buys nothing and must be given back.
+ */
+export type SuccessfulPaymentResult =
+  SettleResult | { outcome: "mismatch" } | { outcome: "duplicate_charge"; tx: Transaction };
+
+/**
  * Idempotent (unique externalId = telegram_payment_charge_id): safe against duplicate/redelivered updates.
  * A mismatching payment is NOT granted and is logged loudly (money moved: needs manual review/refund).
  */
@@ -164,7 +172,7 @@ export async function handleSuccessfulPayment(
   fromTelegramId: number,
   sp: SuccessfulPayment,
   now = new Date(),
-): Promise<SettleResult | { outcome: "mismatch" }> {
+): Promise<SuccessfulPaymentResult> {
   const tx = await db.transaction.findUnique({
     where: { reference: sp.invoice_payload },
     include: { user: true },
@@ -183,13 +191,24 @@ export async function handleSuccessfulPayment(
     });
     return { outcome: "mismatch" };
   }
-  return settlePayment(db, {
+  const res = await settlePayment(db, {
     reference: tx.reference,
     externalId: sp.telegram_payment_charge_id,
     rawJson: sp,
     now,
     allowExpired: true, // the user did pay; honor it even if the link expired meanwhile
   });
+  // Same charge again = a redelivered update (normal, idempotent). A different charge = the user paid twice.
+  if (res.outcome === "already_paid" && res.tx.externalId !== sp.telegram_payment_charge_id) {
+    console.error("[payments] DUPLICATE charge for an already paid order", {
+      charge: sp.telegram_payment_charge_id,
+      paidWith: res.tx.externalId,
+      reference: tx.reference,
+      from: fromTelegramId,
+    });
+    return { outcome: "duplicate_charge", tx: res.tx };
+  }
+  return res;
 }
 
 const dateOf = (d: Date, ru: boolean): string =>
@@ -229,6 +248,31 @@ export function registerPaymentHandlers(bot: Bot, deps: { db: Db; config: Config
             ? "Платёж получен, но марафон больше недоступен для продвижения. Мы вернём оплату."
             : "Payment received, but the marathon can no longer be boosted. We will refund you.",
         );
+      } else if (res.outcome === "duplicate_charge") {
+        const charge = ctx.message.successful_payment.telegram_payment_charge_id;
+        // Give the second charge back right away; if that fails the log line tells the operator what to do.
+        const refunded = await ctx.api.refundStarPayment(ctx.from.id, charge).then(
+          () => true,
+          (e: unknown) => {
+            console.error(
+              "[payments] automatic refund of a duplicate charge FAILED: refund it manually",
+              {
+                charge,
+                err: (e as Error).message,
+              },
+            );
+            return false;
+          },
+        );
+        await ctx.reply(
+          ru
+            ? refunded
+              ? "Вы оплатили этот буст дважды. Повторный платёж возвращён."
+              : "Вы оплатили этот буст дважды. Мы вернём повторный платёж."
+            : refunded
+              ? "You paid for this boost twice. The duplicate payment has been refunded."
+              : "You paid for this boost twice. We will refund the duplicate payment.",
+        );
       }
     } catch (e) {
       console.warn("[payments] could not send the boost notification", (e as Error).message);
@@ -241,8 +285,9 @@ export function registerPaymentHandlers(bot: Bot, deps: { db: Db; config: Config
       externalId: ctx.message.refunded_payment.telegram_payment_charge_id,
     });
     if (r.outcome === "noop" && r.reason === "not_found") {
-      console.error(
-        "[payments] refund for unknown charge",
+      // expected for the automatic refund of a duplicate charge (it was never recorded as an order's payment)
+      console.warn(
+        "[payments] refund for a charge that is not an order's payment (duplicate charge refunded automatically?)",
         ctx.message.refunded_payment.telegram_payment_charge_id,
       );
     }

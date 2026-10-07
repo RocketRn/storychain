@@ -107,7 +107,8 @@ export function registerDevRoutes(app: FastifyInstance, deps: Deps): void {
             currency: tx.currency,
             total_amount: Number(tx.amount),
             invoice_payload: tx.reference,
-            telegram_payment_charge_id: `dev_charge_${nanoid(12)}`,
+            // one charge id per order: completing twice behaves like Telegram redelivering the same update
+            telegram_payment_charge_id: `dev_charge_${tx.reference}`,
           },
           clock(),
         );
