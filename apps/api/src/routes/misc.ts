@@ -1,8 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import {
   allowedMethods,
-  FREE_DAILY_LIMIT,
-  PLANS,
+  BOOST_PLANS,
+  BOOST_PLAN_IDS,
   reportSchema,
   listPostsQuerySchema,
   type MyPostDTO,
@@ -28,11 +28,11 @@ export function registerMiscRoutes(app: FastifyInstance, deps: Deps): void {
     const raw = (req.headers.authorization ?? "").slice(4);
     const data = validateInitData(raw, config.botToken, config.initDataMaxAgeSec);
     const me = await upsertTgUser(db, data.user, true);
-    return buildSession(db, me);
+    return buildSession(me);
   });
 
   app.get("/api/me", { preHandler: requireAuth }, async (req): Promise<SessionDTO> => {
-    return buildSession(db, user(req));
+    return buildSession(user(req));
   });
 
   app.get("/api/me/posts", { preHandler: requireAuth }, async (req): Promise<Page<MyPostDTO>> => {
@@ -58,24 +58,24 @@ export function registerMiscRoutes(app: FastifyInstance, deps: Deps): void {
 
   app.get("/api/plans", { preHandler: requireAuth }, async (req): Promise<PlansDTO> => {
     return {
-      plans: Object.values(PLANS).map((p) => ({
-        id: p.id,
-        durationDays: p.durationDays,
-        stars: { amount: String(p.starsPrice), currency: "XTR" },
-        grm: {
-          amount: config.ton.priceUnits.toString(),
-          human: fromUnits(config.ton.priceUnits, config.ton.decimals),
-          decimals: config.ton.decimals,
-          symbol: "GRM",
-          currency: "GRM",
-        },
-      })),
+      boostPlans: BOOST_PLAN_IDS.map((id) => {
+        const human = fromUnits(config.boost.grmUnits[id], config.ton.decimals);
+        return {
+          id,
+          durationHours: BOOST_PLANS[id].durationMs / 3_600_000,
+          prices: {
+            stars: config.boost.starsPrice[id],
+            // the product label stays "GRM"; GRM_SYMBOL is the on-chain symbol
+            grm: {
+              amount: config.boost.grmUnits[id].toString(),
+              decimals: config.ton.decimals,
+              symbol: "GRM",
+              display: `${human} GRM`,
+            },
+          },
+        };
+      }),
       methods: allowedMethods(req.platform, config.ton.allPlatforms),
-      features: {
-        free: ["limit", "basic_templates", "watermark"],
-        pro: ["unlimited", "premium_templates", "premium_fonts", "no_watermark"],
-      },
-      freeDailyLimit: FREE_DAILY_LIMIT,
     };
   });
 
@@ -94,7 +94,10 @@ export function registerMiscRoutes(app: FastifyInstance, deps: Deps): void {
 
   app.post(
     "/api/reports",
-    { preHandler: requireAuth, config: { rateLimit: { max: 20, timeWindow: "1 hour" } } },
+    {
+      preHandler: requireAuth,
+      config: { rateLimit: { max: config.rateLimits.reportsPerHour, timeWindow: "1 hour" } },
+    },
     async (req, reply) => {
       const me = user(req);
       const body = reportSchema.parse(req.body);

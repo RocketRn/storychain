@@ -11,7 +11,7 @@ import { ZodError } from "zod";
 import type { ApiErrorBody } from "@storychain/shared";
 import type { Config } from "./config";
 import type { Db } from "./db";
-import { AppError } from "./errors";
+import { AppError, errors } from "./errors";
 import { authContext } from "./auth/plugin";
 import type { Storage } from "./storage";
 import { LocalDiskStorage } from "./storage/local";
@@ -82,7 +82,7 @@ export async function buildApp(deps: Deps): Promise<FastifyInstance> {
               frameAncestors: ["'self'", "https://web.telegram.org", "https://*.telegram.org"],
               objectSrc: ["'none'"],
               baseUri: ["'self'"],
-              upgradeInsecureRequests: config.isProd ? [] : null,
+              upgradeInsecureRequests: config.inProduction ? [] : null,
             },
           },
         }
@@ -96,7 +96,7 @@ export async function buildApp(deps: Deps): Promise<FastifyInstance> {
   await app.register(authContext(config, db));
   await app.register(rateLimit, {
     global: true,
-    max: 240,
+    max: config.rateLimits.globalPerMin,
     timeWindow: "1 minute",
     keyGenerator: (req) => (req.user ? `u:${req.user.id}` : `ip:${req.ip}`),
     // only the API is rate limited; static assets (many files per page load, shared NAT IPs) are not
@@ -113,6 +113,10 @@ export async function buildApp(deps: Deps): Promise<FastifyInstance> {
       reply.code(status).send({ error: { code, message } } satisfies ApiErrorBody);
     if (err instanceof AppError) return send(err.status, err.code, err.message);
     if (err instanceof ZodError) {
+      // channelUrl failures carry their own stable code
+      if (err.issues.some((i) => i.message === "INVALID_CHANNEL_URL")) {
+        return send(400, "INVALID_CHANNEL_URL", errors.invalidChannelUrl().message);
+      }
       return send(
         400,
         "BAD_REQUEST",
@@ -123,7 +127,13 @@ export async function buildApp(deps: Deps): Promise<FastifyInstance> {
     if (e.code === "FST_REQ_FILE_TOO_LARGE" || e.code === "FST_ERR_CTP_BODY_TOO_LARGE") {
       return send(413, "PAYLOAD_TOO_LARGE", "Payload too large");
     }
-    if (e.statusCode === 429) return send(429, "RATE_LIMITED", "Too many requests");
+    // anti-abuse only: never worded or shaped like a quota or a paywall
+    if (e.statusCode === 429)
+      return send(
+        429,
+        "RATE_LIMITED",
+        "You're going a bit fast. Please wait a moment and try again.",
+      );
     if (e.statusCode && e.statusCode >= 400 && e.statusCode < 500) {
       return send(e.statusCode, "BAD_REQUEST", e.message);
     }
@@ -177,7 +187,7 @@ export async function buildApp(deps: Deps): Promise<FastifyInstance> {
   registerMiscRoutes(app, deps);
   registerChainRoutes(app, deps);
   registerPaymentRoutes(app, deps);
-  if (config.devMode && !config.isProd) registerDevRoutes(app, deps);
+  if (config.devMode && !config.inProduction) registerDevRoutes(app, deps);
   if (deps.bot && config.botMode === "webhook") {
     // grammY verifies the X-Telegram-Bot-Api-Secret-Token header against `secretToken`
     app.post(

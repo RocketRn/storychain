@@ -1,9 +1,7 @@
 import { nanoid } from "nanoid";
 import type { Chain, Post, User } from "@prisma/client";
 import {
-  FREE_DAILY_LIMIT,
   getTemplate,
-  isPremiumFont,
   type CreatePostFields,
   type PostDTO,
   type PublicUserDTO,
@@ -13,7 +11,6 @@ import type { Storage } from "../storage";
 import { errors } from "../errors";
 import { isTextAllowed } from "../moderation";
 import { processUpload } from "./image";
-import { isPro, utcDay } from "./users";
 
 export const toPublicUser = (u: Pick<User, "id" | "username" | "firstName">): PublicUserDTO => ({
   id: u.id,
@@ -42,24 +39,14 @@ export async function publishPost(
 ): Promise<Post & { user: User }> {
   const { db, storage } = deps;
   const { user, chain, fields } = args;
-  const now = new Date();
-  const pro = isPro(user, now);
-  const day = utcDay(now);
 
   if (!isTextAllowed(fields.caption)) throw errors.blocked();
-  const template = getTemplate(fields.templateId);
-  if (!template) throw errors.badRequest("Unknown template");
-  if (template.isPremium && !pro) throw errors.proRequired();
-  if (fields.fontFamily && isPremiumFont(fields.fontFamily) && !pro) throw errors.proRequired();
+  // Every template is free for everyone; only unknown ids are rejected.
+  if (!getTemplate(fields.templateId)) throw errors.badRequest("Unknown template");
 
-  // Cheap pre-flight so we don't process/store images for an over-limit user. The authoritative,
-  // atomic check happens inside the DB transaction below.
-  if (!pro) {
-    const row = await db.dailyUsage.findUnique({ where: { userId_day: { userId: user.id, day } } });
-    if ((row?.count ?? 0) >= FREE_DAILY_LIMIT) throw errors.dailyLimit();
-  }
-
-  const watermarked = !pro;
+  // The clean "StoryChain" attribution badge is composited here, server side, for EVERY user
+  // (the client must never bake it into the upload). There are no limits and no paid tiers on posting.
+  const watermarked = true;
   const { image, thumb } = await processUpload(args.image, { watermark: watermarked });
   const id = nanoid(12);
   const [full, small] = await Promise.all([
@@ -69,18 +56,6 @@ export async function publishPost(
 
   return withRetry(() =>
     db.$transaction(async (tx) => {
-      // Atomic daily usage: ensure row exists, then conditional increment.
-      await tx.dailyUsage.upsert({
-        where: { userId_day: { userId: user.id, day } },
-        create: { userId: user.id, day, count: 0 },
-        update: {},
-      });
-      const inc = await tx.dailyUsage.updateMany({
-        where: { userId: user.id, day, ...(pro ? {} : { count: { lt: FREE_DAILY_LIMIT } }) },
-        data: { count: { increment: 1 } },
-      });
-      if (inc.count === 0) throw errors.dailyLimit();
-
       const data = {
         imageUrl: full.url,
         thumbUrl: small.url,

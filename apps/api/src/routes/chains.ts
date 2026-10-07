@@ -118,7 +118,7 @@ export function registerChainRoutes(app: FastifyInstance, deps: Deps): void {
     "/api/chains",
     {
       preHandler: requireAuth,
-      config: { rateLimit: { max: 10, timeWindow: "1 hour" } },
+      config: { rateLimit: { max: config.rateLimits.chainsPerHour, timeWindow: "1 hour" } },
     },
     async (req, reply): Promise<ChainDTO> => {
       const me = user(req);
@@ -175,7 +175,7 @@ export function registerChainRoutes(app: FastifyInstance, deps: Deps): void {
     "/api/chains/:id/posts",
     {
       preHandler: requireAuth,
-      config: { rateLimit: { max: 20, timeWindow: "1 hour" } },
+      config: { rateLimit: { max: config.rateLimits.postsPerMin, timeWindow: "1 minute" } },
     },
     async (req, reply): Promise<CreatePostResultDTO> => {
       const me = user(req);

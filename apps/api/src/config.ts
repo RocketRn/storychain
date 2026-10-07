@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 import { z } from "zod";
-import { toUnits } from "@storychain/shared";
+import { BOOST_PLANS, toUnits, type BoostPlanId } from "@storychain/shared";
 
 const bool = z.enum(["true", "false"]).default("false");
 
@@ -42,7 +42,29 @@ const schema = z.object({
   GRM_JETTON_MASTER: z.string().default("EQC47093oX5Xhb0xuk2lCr2RhS8rj-vul61u4W2UH5ORmG_O"),
   GRM_DECIMALS: z.coerce.number().int().min(0).max(18).default(9),
   GRM_SYMBOL: z.string().default("GRAM"),
-  GRM_PRO_30D_PRICE: z.string().default("100"),
+  /** PLACEHOLDER prices: the owner must set the real ones. GRM amounts are human-readable strings (no floats). */
+  GRM_BOOST_24H_PRICE: z.string().default("50"),
+  GRM_BOOST_7D_PRICE: z.string().default("250"),
+  STARS_BOOST_24H_PRICE: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(100_000)
+    .default(BOOST_PLANS.boost_24h.starsPrice),
+  STARS_BOOST_7D_PRICE: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(100_000)
+    .default(BOOST_PLANS.boost_7d.starsPrice),
+  /** A boost may never extend further than this many days into the future (stacking guard) */
+  BOOST_MAX_HORIZON_DAYS: z.coerce.number().int().min(1).max(365).default(30),
+  /** Anti-abuse rate limits (NOT business quotas). Per authenticated user, per window. */
+  RATE_LIMIT_GLOBAL_PER_MIN: z.coerce.number().int().min(1).default(240),
+  RATE_LIMIT_POSTS_PER_MIN: z.coerce.number().int().min(1).default(20),
+  RATE_LIMIT_CHAINS_PER_HOUR: z.coerce.number().int().min(1).default(10),
+  RATE_LIMIT_REPORTS_PER_HOUR: z.coerce.number().int().min(1).default(10),
+  RATE_LIMIT_PAYMENTS_PER_MIN: z.coerce.number().int().min(1).default(10),
   TON_MERCHANT_ADDRESS: z.string().default(""),
   TON_NETWORK: z.enum(["mainnet", "testnet"]).default("mainnet"),
   TONAPI_KEY: z.string().default(""),
@@ -57,11 +79,11 @@ export function loadConfig(rawEnv: NodeJS.ProcessEnv = process.env) {
   const env = Object.fromEntries(Object.entries(rawEnv).filter(([, v]) => v !== ""));
   const e = schema.parse(env);
   const devMode = e.DEV_MODE === "true";
-  const isProd = e.NODE_ENV === "production";
-  if (devMode && isProd) {
+  const inProduction = e.NODE_ENV === "production";
+  if (devMode && inProduction) {
     throw new Error("Refusing to start: DEV_MODE=true is not allowed with NODE_ENV=production");
   }
-  if (isProd) {
+  if (inProduction) {
     const missing: string[] = [];
     const required: Array<keyof typeof e> = [
       "BOT_TOKEN",
@@ -92,21 +114,29 @@ export function loadConfig(rawEnv: NodeJS.ProcessEnv = process.env) {
       throw new Error("PUBLIC_BASE_URL must be a public HTTPS URL in production");
     }
   }
-  let grmPriceUnits: bigint;
-  try {
-    grmPriceUnits = toUnits(e.GRM_PRO_30D_PRICE, e.GRM_DECIMALS);
-  } catch (err) {
-    throw new Error(`Invalid GRM_PRO_30D_PRICE: ${(err as Error).message}`);
+  const grmHuman: Record<BoostPlanId, string> = {
+    boost_24h: e.GRM_BOOST_24H_PRICE,
+    boost_7d: e.GRM_BOOST_7D_PRICE,
+  };
+  const grmUnits = {} as Record<BoostPlanId, bigint>;
+  for (const [id, human] of Object.entries(grmHuman) as Array<[BoostPlanId, string]>) {
+    try {
+      grmUnits[id] = toUnits(human, e.GRM_DECIMALS);
+    } catch (err) {
+      throw new Error(`Invalid GRM_${id.toUpperCase()}_PRICE: ${(err as Error).message}`);
+    }
+    if (grmUnits[id] <= 0n)
+      throw new Error(`GRM_${id.toUpperCase()}_PRICE must be greater than zero`);
   }
   return {
     nodeEnv: e.NODE_ENV,
-    isProd,
+    inProduction,
     port: e.PORT,
     devMode,
     corsOrigins: e.CORS_ORIGINS.split(",")
       .map((s) => s.trim())
       .filter(Boolean),
-    serveWeb: (e.SERVE_WEB ?? (isProd ? "true" : "false")) === "true",
+    serveWeb: (e.SERVE_WEB ?? (inProduction ? "true" : "false")) === "true",
     webDistDir: resolve(e.WEB_DIST_DIR || "../web/dist"),
     trustProxy: e.TRUST_PROXY === "true",
     initDataMaxAgeSec: e.INITDATA_MAX_AGE_SEC,
@@ -115,7 +145,7 @@ export function loadConfig(rawEnv: NodeJS.ProcessEnv = process.env) {
     botUsername: e.BOT_USERNAME,
     appShortName: e.APP_SHORT_NAME,
     // The bot is started only when explicitly enabled (default: on in production, off in dev/mock)
-    botEnabled: (e.BOT_ENABLED ?? (isProd ? "true" : "false")) === "true",
+    botEnabled: (e.BOT_ENABLED ?? (inProduction ? "true" : "false")) === "true",
     botMode: e.BOT_MODE,
     webhookUrl: e.WEBHOOK_URL,
     webhookSecret: e.WEBHOOK_SECRET,
@@ -133,12 +163,26 @@ export function loadConfig(rawEnv: NodeJS.ProcessEnv = process.env) {
         publicUrl: e.S3_PUBLIC_URL.replace(/\/$/, ""),
       },
     },
+    boost: {
+      starsPrice: {
+        boost_24h: e.STARS_BOOST_24H_PRICE,
+        boost_7d: e.STARS_BOOST_7D_PRICE,
+      } as Record<BoostPlanId, number>,
+      grmHuman,
+      grmUnits,
+      maxHorizonMs: e.BOOST_MAX_HORIZON_DAYS * 86_400_000,
+    },
+    rateLimits: {
+      globalPerMin: e.RATE_LIMIT_GLOBAL_PER_MIN,
+      postsPerMin: e.RATE_LIMIT_POSTS_PER_MIN,
+      chainsPerHour: e.RATE_LIMIT_CHAINS_PER_HOUR,
+      reportsPerHour: e.RATE_LIMIT_REPORTS_PER_HOUR,
+      paymentsPerMin: e.RATE_LIMIT_PAYMENTS_PER_MIN,
+    },
     ton: {
       jettonMaster: e.GRM_JETTON_MASTER,
       decimals: e.GRM_DECIMALS,
       symbol: e.GRM_SYMBOL,
-      priceHuman: e.GRM_PRO_30D_PRICE,
-      priceUnits: grmPriceUnits,
       merchantAddress: e.TON_MERCHANT_ADDRESS,
       network: e.TON_NETWORK,
       apiKey: e.TONAPI_KEY,

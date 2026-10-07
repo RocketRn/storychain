@@ -27,7 +27,7 @@ export function invoiceLinkCreator(
     return (a) =>
       bot.api.createInvoiceLink(a.title, a.description, a.payload, "", a.currency, a.prices);
   }
-  if (config.devMode && !config.isProd) return async (a) => `mock-invoice://${a.payload}`;
+  if (config.devMode && !config.inProduction) return async (a) => `mock-invoice://${a.payload}`;
   return undefined;
 }
 

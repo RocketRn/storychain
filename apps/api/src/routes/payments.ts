@@ -28,7 +28,7 @@ const WALLET_TTL_MS = 10 * 60 * 1000;
 
 export function registerPaymentRoutes(app: FastifyInstance, deps: Deps): void {
   const { db, config } = deps;
-  const limit = { rateLimit: { max: 10, timeWindow: "1 minute" } };
+  const limit = { rateLimit: { max: config.rateLimits.paymentsPerMin, timeWindow: "1 minute" } };
   const walletCache = new Map<string, { value: string; expires: number }>();
 
   async function statusDto(tx: Transaction): Promise<PaymentStatusDTO> {

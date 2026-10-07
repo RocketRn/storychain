@@ -1,12 +1,7 @@
 import type { User } from "@prisma/client";
-import { FREE_DAILY_LIMIT, type SessionDTO, type UserDTO, type UsageDTO } from "@storychain/shared";
+import type { SessionDTO, UserDTO } from "@storychain/shared";
 import type { Db } from "../db";
 import type { TgUser } from "../auth/initData";
-
-export const isPro = (u: Pick<User, "proUntil">, now = new Date()): boolean =>
-  !!u.proUntil && u.proUntil.getTime() > now.getTime();
-
-export const utcDay = (d = new Date()): string => d.toISOString().slice(0, 10);
 
 export const toUserDTO = (u: User): UserDTO => ({
   id: u.id,
@@ -48,18 +43,6 @@ export async function upsertTgUser(db: Db, tg: TgUser, touch: boolean): Promise<
   });
 }
 
-export async function getUsage(db: Db, user: User, now = new Date()): Promise<UsageDTO> {
-  const row = await db.dailyUsage.findUnique({
-    where: { userId_day: { userId: user.id, day: utcDay(now) } },
-  });
-  return { dailyLimit: isPro(user, now) ? null : FREE_DAILY_LIMIT, usedToday: row?.count ?? 0 };
-}
-
-export async function buildSession(db: Db, user: User): Promise<SessionDTO> {
-  return {
-    user: toUserDTO(user),
-    isPro: isPro(user),
-    proUntil: user.proUntil?.toISOString() ?? null,
-    ...(await getUsage(db, user)),
-  };
+export function buildSession(user: User): SessionDTO {
+  return { user: toUserDTO(user) };
 }
