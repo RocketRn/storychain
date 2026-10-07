@@ -64,5 +64,7 @@ for (const c of CHAINS) {
     );
   }
 }
+// Demo posts must not eat the demo users' daily quota
+await db.dailyUsage.deleteMany({ where: { userId: { in: users.map((u) => u.id) } } });
 console.log("Seeded.");
 await db.$disconnect();

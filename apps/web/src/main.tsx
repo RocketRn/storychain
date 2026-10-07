@@ -1,14 +1,19 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import "./index.css";
+import { initTelegram } from "./lib/tg";
+import { App, BootError } from "./App";
 
-const root = document.getElementById("root");
-if (!root) throw new Error("#root missing");
-createRoot(root).render(
-  <React.StrictMode>
-    <main className="mx-auto max-w-[480px] p-6">
-      <h1 className="text-2xl font-bold">StoryChain</h1>
-      <p className="opacity-70">Placeholder</p>
-    </main>
-  </React.StrictMode>,
-);
+const root = createRoot(document.getElementById("root") as HTMLElement);
+
+initTelegram()
+  .then(() =>
+    root.render(
+      <React.StrictMode>
+        <App />
+      </React.StrictMode>,
+    ),
+  )
+  .catch((e: unknown) =>
+    root.render(<BootError message={e instanceof Error ? e.message : String(e)} />),
+  );

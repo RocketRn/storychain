@@ -21,3 +21,12 @@ One line per decision: decision — reason.
 - Uploads accepted: JPEG/PNG only, exactly 1080x1920, re-encoded to JPEG q90 (metadata stripped); thumbnail 360px wide.
 - Demo/dev identities: telegramId 1000000+N = `?mock_user=N`; seed creates users 1000001..1000004. Seeded chains have fixed ids (cat00001, desk0002, trk00003).
 - Platform method flag lives in `packages/shared/src/plans.ts` (`allowedMethods`): Stars only on ios/android unless `TON_PAYMENTS_ALL_PLATFORMS=true`. Owner must verify against current Telegram rules.
+- Web uses `react-router-dom` v6 (BrowserRouter) + TanStack Query v5; no Zustand — server state lives in Query, the little UI state is local/hooks.
+- `tg` facade is a Proxy over the real/mock implementation chosen once in `initTelegram()`; components never touch `window.Telegram`.
+- Mock is selected by the build-time constant `import.meta.env.VITE_DEV_MOCK === "true"` and loaded through dynamic `import()` — Vite drops it (and MockUI/DevTools) from production bundles (verified by grepping `dist`); `vite.config.ts` additionally fails any production-mode build with the flag on.
+- Mock identity (`mock_user`, `mock_premium`, `mock_platform`, `mock_lang`) is persisted in localStorage so SPA navigation and DevTools switches survive reloads; query params override it when present.
+- Greeting/name displayed in UI comes from the server session (authoritative), not from client-side initDataUnsafe.
+- Mock initData is signed at page load and is valid for 1h (server maxAge); the mock does not auto-refresh — reload the page after an hour.
+- API base in the web app is same-origin `/api` (Vite proxy in dev, Fastify single-origin in prod); `VITE_API_URL` is optional.
+- E2E uses its own SQLite file + upload dir, API on :3100 and web on :5273 (single origin via the Vite proxy), recreated on every run. The sandbox's preinstalled Chromium is used via `executablePath` (override with `PW_CHROMIUM`).
+- Seed removes the demo users' DailyUsage rows so seeding never consumes their daily quota.

@@ -11,6 +11,12 @@ importers:
       '@eslint/js':
         specifier: ^9.17.0
         version: 9.39.5
+      '@playwright/test':
+        specifier: ^1.63.0
+        version: 1.63.0
+      '@types/node':
+        specifier: ^22.20.5
+        version: 22.20.5
       concurrently:
         specifier: ^9.1.0
         version: 9.2.4
@@ -96,12 +102,18 @@ importers:
       '@storychain/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@tanstack/react-query':
+        specifier: ^5.104.1
+        version: 5.104.1(react@18.3.1)
       react:
         specifier: ^18.3.1
         version: 18.3.1
       react-dom:
         specifier: ^18.3.1
         version: 18.3.1(react@18.3.1)
+      react-router-dom:
+        specifier: ^6.30.6
+        version: 6.30.6(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
     devDependencies:
       '@types/react':
         specifier: ^18.3.18
@@ -1046,6 +1058,11 @@ packages:
   '@pinojs/redact@0.4.0':
     resolution: {integrity: sha512-k2ENnmBugE/rzQfEcdWHcCY+/FM3VLzH9cYEsbdsoqrvzAKRhUZeRNhAZvB8OitQJ1TBed3yqWtdjzS6wJKBwg==}
 
+  '@playwright/test@1.63.0':
+    resolution: {integrity: sha512-oxMK4vllB9RK5NQ2l1pq1IfOf2AvnEuj/vYGDj0H2nMtmtZpKtCwt/l00GEO6xjGfpBNAvjovvYdCm50dRQkpQ==}
+    engines: {node: '>=20'}
+    hasBin: true
+
   '@prisma/client@6.19.3':
     resolution: {integrity: sha512-mKq3jQFhjvko5LTJFHGilsuQs+W+T3Gm451NzuTDGQxwCzwXHYnIu2zGkRoW+Exq3Rob7yp2MfzSrdIiZVhrBg==}
     engines: {node: '>=18.18'}
@@ -1075,6 +1092,10 @@ packages:
 
   '@prisma/get-platform@6.19.3':
     resolution: {integrity: sha512-xFj1VcJ1N3MKooOQAGO0W5tsd0W2QzIvW7DD7c/8H14Zmp4jseeWAITm+w2LLoLrlhoHdPPh0NMZ8mfL6puoHA==}
+
+  '@remix-run/router@1.23.4':
+    resolution: {integrity: sha512-q7j5geK7xs3UJSdm9/iytUNclBnLmYx1EnSeCFXHPeutdqgIMeFeHtUZgS3EhlKxdBEAu8OwtJCwmLrEzpSs7Q==}
+    engines: {node: '>=14.0.0'}
 
   '@rolldown/pluginutils@1.0.0-beta.27':
     resolution: {integrity: sha512-+d0F4MKMCbeVUJwG96uQ4SgAznZNSq93I3V+9NHA4OpvqG8mRCpGdKmK8l/dl02h2CCDHwW2FqilnTyDcAnqjA==}
@@ -1230,6 +1251,14 @@ packages:
 
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
+
+  '@tanstack/query-core@5.104.1':
+    resolution: {integrity: sha512-TiRghcrGkUTE+M4JBxvpPSpBhxvIzQairw+cksrHYGr+2uwC77yW1SY9nYxnYRYOppvucf8rEg6b5byoz4rTpw==}
+
+  '@tanstack/react-query@5.104.1':
+    resolution: {integrity: sha512-Zz70EgjahNI7aCz8BZxM3vUGU44ycxEAzMuCUjLeA7SVhhOkg3ZgPjPJPvHjs6Rmky/dtmnu1WzjGHNHmhCoZQ==}
+    peerDependencies:
+      react: ^18 || ^19
 
   '@types/babel__core@7.20.5':
     resolution: {integrity: sha512-qoQprZvz5wQFJwMDqeseRXWv3rqMvhgpbXFfVyWhbx9X47POIA6i/+dXefEmZKoAgOaTdaIgNSMqMIU61yRyzA==}
@@ -2162,6 +2191,16 @@ packages:
   pkg-types@2.3.3:
     resolution: {integrity: sha512-j/lCFdcppV0JxWpCEITdbDltBxPP6cHT+yNJ6Go2OgoSA9518X847X9z0p6LtA4Nc16+eQzCZjRrWanTGvHJ5w==}
 
+  playwright-core@1.63.0:
+    resolution: {integrity: sha512-rYCsBF/M5HjUch52bbtVONEFjv6Xu8sm8h72dNlR5bzIE1fvC/bxgspzkjSfU+MweEMmPM8KJebG6nnyxo5mCg==}
+    engines: {node: '>=20'}
+    hasBin: true
+
+  playwright@1.63.0:
+    resolution: {integrity: sha512-+7ziBLidS4NaNCdt57SUDT+wYmmd5fmiQejUic/kb+YsYSCPyOOE9sebzMjNmQrsnNpDJqd4WHvV/8lfKfUDUg==}
+    engines: {node: '>=20'}
+    hasBin: true
+
   postcss-import@15.1.0:
     resolution: {integrity: sha512-hpr+J05B2FVYUAXHeK1YyI267J/dDDhMU6B6civm8hSY1jYJnBXxzKDKDswzJmtLHryrjhnDjqqp/49t8FALew==}
     engines: {node: '>=14.0.0'}
@@ -2258,6 +2297,19 @@ packages:
   react-refresh@0.17.0:
     resolution: {integrity: sha512-z6F7K9bV85EfseRCp2bzrpyQ0Gkw1uLoCel9XBVWPg/TjRj94SkJzUTGfOa4bs7iJvBWtQG0Wq7wnI0syw3EBQ==}
     engines: {node: '>=0.10.0'}
+
+  react-router-dom@6.30.6:
+    resolution: {integrity: sha512-0RHKZz7wwffvkU+2MFVT2NnjK44ssLEV+m0CAJaS2Ksmorrwj7WxH00jO0SOCW26/tINUnJHToXblDs33I38YQ==}
+    engines: {node: '>=14.0.0'}
+    peerDependencies:
+      react: '>=16.8'
+      react-dom: '>=16.8'
+
+  react-router@6.30.6:
+    resolution: {integrity: sha512-5HfK7k5im7LTOB0EqCQmfvy4C13G92Ssj1VTmouTK3AJvyjKTnFuCV0vcMAD/JS+JC4DvDIBRrlAeJIFjh5VWg==}
+    engines: {node: '>=14.0.0'}
+    peerDependencies:
+      react: '>=16.8'
 
   react@18.3.1:
     resolution: {integrity: sha512-wS+hAgJShR0KhEvPJArfuPVN1+Hz1t0Y6n5jLrGQbkb4urgPE/0Rve+1kMB1v/oWgHgm4WIcV+i7F2pTVj+2iQ==}
@@ -3462,6 +3514,10 @@ snapshots:
 
   '@pinojs/redact@0.4.0': {}
 
+  '@playwright/test@1.63.0':
+    dependencies:
+      playwright: 1.63.0
+
   '@prisma/client@6.19.3(prisma@6.19.3(typescript@5.9.3))(typescript@5.9.3)':
     optionalDependencies:
       prisma: 6.19.3(typescript@5.9.3)
@@ -3496,6 +3552,8 @@ snapshots:
   '@prisma/get-platform@6.19.3':
     dependencies:
       '@prisma/debug': 6.19.3
+
+  '@remix-run/router@1.23.4': {}
 
   '@rolldown/pluginutils@1.0.0-beta.27': {}
 
@@ -3608,6 +3666,13 @@ snapshots:
       tslib: 2.8.1
 
   '@standard-schema/spec@1.1.0': {}
+
+  '@tanstack/query-core@5.104.1': {}
+
+  '@tanstack/react-query@5.104.1(react@18.3.1)':
+    dependencies:
+      '@tanstack/query-core': 5.104.1
+      react: 18.3.1
 
   '@types/babel__core@7.20.5':
     dependencies:
@@ -4615,6 +4680,12 @@ snapshots:
       exsolve: 1.1.3
       pathe: 2.0.3
 
+  playwright-core@1.63.0: {}
+
+  playwright@1.63.0:
+    dependencies:
+      playwright-core: 1.63.0
+
   postcss-import@15.1.0(postcss@8.5.29):
     dependencies:
       postcss: 8.5.29
@@ -4690,6 +4761,18 @@ snapshots:
       scheduler: 0.23.2
 
   react-refresh@0.17.0: {}
+
+  react-router-dom@6.30.6(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
+    dependencies:
+      '@remix-run/router': 1.23.4
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
+      react-router: 6.30.6(react@18.3.1)
+
+  react-router@6.30.6(react@18.3.1):
+    dependencies:
+      '@remix-run/router': 1.23.4
+      react: 18.3.1
 
   react@18.3.1:
     dependencies:
