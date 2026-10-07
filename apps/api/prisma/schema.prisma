@@ -45,8 +45,17 @@ model Chain {
   boosts       ChainBoost[]
   transactions Transaction[]
 
-  @@index([isFeatured, createdAt])
+  /// featured feed: WHERE isFeatured = true AND isHidden = false ORDER BY createdAt DESC, id DESC
+  @@index([isFeatured, isHidden, createdAt, id])
   @@index([isBoosted, boostedUntil])
+  /// feeds: WHERE isHidden = false ORDER BY postsCount DESC, createdAt DESC, id DESC (trending) / createdAt DESC, id DESC (new)
+  @@index([isHidden, postsCount, createdAt, id])
+  @@index([isHidden, createdAt, id])
+  /// "My marathons": WHERE creatorId = ? AND isHidden = false ORDER BY createdAt DESC, id DESC
+  @@index([creatorId, isHidden, createdAt, id])
+  /// Hot carousel: WHERE isHidden = false AND boostedUntil > now ORDER BY boostedUntil DESC, id DESC
+  /// (the cached isBoosted flag is deliberately not part of the predicate)
+  @@index([isHidden, boostedUntil, id])
 }
 
 model Post {
@@ -67,6 +76,8 @@ model Post {
 
   @@unique([chainId, userId])
   @@index([chainId, position])
+  /// "My posts": WHERE userId = ? ORDER BY createdAt DESC
+  @@index([userId, createdAt, id])
 }
 
 model Transaction {

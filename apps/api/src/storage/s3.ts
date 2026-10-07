@@ -1,4 +1,4 @@
-import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectsCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import type { Storage } from "./index";
 
 export interface S3Options {
@@ -32,5 +32,17 @@ export class S3Storage implements Storage {
       }),
     );
     return { url: `${this.opts.publicUrl}/${key}` };
+  }
+
+  async remove(urls: string[]): Promise<void> {
+    const prefix = `${this.opts.publicUrl}/`;
+    const keys = urls.filter((u) => u.startsWith(prefix)).map((u) => u.slice(prefix.length));
+    if (keys.length === 0) return;
+    await this.client.send(
+      new DeleteObjectsCommand({
+        Bucket: this.opts.bucket,
+        Delete: { Objects: keys.map((Key) => ({ Key })), Quiet: true },
+      }),
+    );
   }
 }

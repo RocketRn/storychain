@@ -14,6 +14,9 @@ export class MemoryStorage implements Storage {
     this.files.set(key, buffer);
     return { url: `http://test.local/${key}` };
   }
+  async remove(urls: string[]): Promise<void> {
+    for (const url of urls) this.files.delete(url.replace("http://test.local/", ""));
+  }
   get(url: string): Buffer {
     const b = this.files.get(url.replace("http://test.local/", ""));
     if (!b) throw new Error(`not stored: ${url}`);
@@ -31,6 +34,7 @@ export interface TestCtx {
 export async function createCtx(
   env: Record<string, string> = {},
   extra: Partial<Deps> = {},
+  opts: { databaseUrl?: string } = {},
 ): Promise<TestCtx> {
   const config = loadConfig({
     NODE_ENV: "test",
@@ -46,7 +50,7 @@ export async function createCtx(
     RATE_LIMIT_PAYMENTS_PER_MIN: "100000",
     ...env,
   } as NodeJS.ProcessEnv);
-  const db = createDb(process.env.TEST_DATABASE_URL as string);
+  const db = createDb(opts.databaseUrl ?? (process.env.TEST_DATABASE_URL as string));
   const storage = new MemoryStorage();
   const app = await buildApp({ config, db, storage, ...extra });
   await app.ready();

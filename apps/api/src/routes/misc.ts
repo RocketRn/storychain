@@ -17,6 +17,9 @@ import { errors } from "../errors";
 import { upsertTgUser, buildSession } from "../services/users";
 import { toPostDTO } from "../services/posts";
 import { validateInitData } from "../auth/initData";
+import { afterNewest, decodeNewest, encodeNewest } from "../pagination";
+
+const MY_POSTS_PAGE = 30;
 
 export function registerMiscRoutes(app: FastifyInstance, deps: Deps): void {
   const { db, config } = deps;
@@ -38,21 +41,25 @@ export function registerMiscRoutes(app: FastifyInstance, deps: Deps): void {
   app.get("/api/me/posts", { preHandler: requireAuth }, async (req): Promise<Page<MyPostDTO>> => {
     const me = user(req);
     const q = listPostsQuerySchema.parse(req.query);
-    const offset = q.cursor ? Number(q.cursor) : 0;
-    if (!Number.isInteger(offset) || offset < 0) throw errors.badRequest("Bad cursor");
     const rows = await db.post.findMany({
-      where: { userId: me.id, isHidden: false, chain: { isHidden: false } },
+      where: {
+        userId: me.id,
+        isHidden: false,
+        chain: { isHidden: false },
+        ...(q.cursor ? afterNewest(decodeNewest(q.cursor)) : {}),
+      },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-      skip: offset,
-      take: 31,
+      take: MY_POSTS_PAGE + 1,
       include: { user: true, chain: true },
     });
+    const items = rows.slice(0, MY_POSTS_PAGE);
+    const last = items.at(-1);
     return {
-      items: rows.slice(0, 30).map((p) => ({
+      items: items.map((p) => ({
         ...toPostDTO(p, me.id),
         chain: { id: p.chain.id, title: p.chain.title, emoji: p.chain.emoji },
       })),
-      nextCursor: rows.length > 30 ? String(offset + 30) : null,
+      nextCursor: rows.length > MY_POSTS_PAGE && last ? encodeNewest(last) : null,
     };
   });
 

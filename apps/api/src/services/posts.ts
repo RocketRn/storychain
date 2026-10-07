@@ -54,33 +54,64 @@ export async function publishPost(
     storage.put(`posts/${chain.id}/${id}_t.jpg`, thumb, "image/jpeg"),
   ]);
 
-  return withRetry(() =>
-    db.$transaction(async (tx) => {
-      const data = {
-        imageUrl: full.url,
-        thumbUrl: small.url,
-        templateId: fields.templateId,
-        caption: fields.caption ?? null,
-        watermarked,
-        sharedToStory: false,
-      };
-      const existing = await tx.post.findUnique({
-        where: { chainId_userId: { chainId: chain.id, userId: user.id } },
-      });
-      if (existing) {
-        // Re-posting replaces the previous post and keeps its position.
-        return tx.post.update({ where: { id: existing.id }, data, include: { user: true } });
-      }
-      // Increment first (takes the write lock) so concurrent joins get distinct positions.
-      const updated = await tx.chain.update({
-        where: { id: chain.id },
-        data: { postsCount: { increment: 1 } },
-        select: { postsCount: true },
-      });
-      return tx.post.create({
-        data: { chainId: chain.id, userId: user.id, position: updated.postsCount, ...data },
-        include: { user: true },
-      });
-    }),
-  );
+  let result: {
+    post: Post & { user: User };
+    replaced: { imageUrl: string; thumbUrl: string } | null;
+  };
+  try {
+    result = await withRetry(() =>
+      db.$transaction(async (tx) => {
+        const data = {
+          imageUrl: full.url,
+          thumbUrl: small.url,
+          templateId: fields.templateId,
+          caption: fields.caption ?? null,
+          watermarked,
+          sharedToStory: false,
+        };
+        const existing = await tx.post.findUnique({
+          where: { chainId_userId: { chainId: chain.id, userId: user.id } },
+        });
+        if (existing) {
+          // Re-posting replaces the previous post and keeps its position.
+          const post = await tx.post.update({
+            where: { id: existing.id },
+            data,
+            include: { user: true },
+          });
+          return { post, replaced: { imageUrl: existing.imageUrl, thumbUrl: existing.thumbUrl } };
+        }
+        // Increment first (takes the write lock) so concurrent joins get distinct positions.
+        const updated = await tx.chain.update({
+          where: { id: chain.id },
+          data: { postsCount: { increment: 1 } },
+          select: { postsCount: true },
+        });
+        const post = await tx.post.create({
+          data: { chainId: chain.id, userId: user.id, position: updated.postsCount, ...data },
+          include: { user: true },
+        });
+        return { post, replaced: null };
+      }),
+    );
+  } catch (e) {
+    // nothing references the files we just wrote: do not leave them publicly reachable forever
+    await removeQuietly(storage, [full.url, small.url]);
+    throw e;
+  }
+  // The previous card was replaced on purpose (possibly because it showed something it should not have):
+  // it must stop being reachable by its old URL, and must not accumulate in storage.
+  if (result.replaced) {
+    await removeQuietly(storage, [result.replaced.imageUrl, result.replaced.thumbUrl]);
+  }
+  return result.post;
+}
+
+/** Storage cleanup is housekeeping: a failure is logged, never surfaced to the user. */
+async function removeQuietly(storage: Storage, urls: string[]): Promise<void> {
+  try {
+    await storage.remove(urls);
+  } catch (e) {
+    console.warn("[storage] could not delete replaced/orphaned files", urls, (e as Error).message);
+  }
 }

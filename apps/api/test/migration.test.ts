@@ -86,6 +86,29 @@ describe("boosts_pivot migration", () => {
     db.close();
   });
 
+  it("later migrations (audit indexes) apply on top of migrated data without touching it", () => {
+    const db = new DatabaseSync(join(dir, "legacy.db"));
+    const rowsBefore = db.prepare(`SELECT count(*) AS n FROM "Chain"`).all()[0]?.n;
+    for (const name of names.slice(names.indexOf(pivot) + 1)) db.exec(sqlOf(name));
+    expect(db.prepare(`SELECT count(*) AS n FROM "Chain"`).all()[0]?.n).toBe(rowsBefore);
+    const indexes = db
+      .prepare(`SELECT name FROM sqlite_master WHERE type='index' AND tbl_name IN ('Chain','Post')`)
+      .all()
+      .map((r) => String(r.name));
+    for (const wanted of [
+      "Chain_isHidden_postsCount_createdAt_id_idx", // trending feed
+      "Chain_isHidden_createdAt_id_idx", // newest feed
+      "Chain_isFeatured_isHidden_createdAt_id_idx", // featured feed
+      "Chain_creatorId_isHidden_createdAt_id_idx", // My marathons
+      "Chain_isHidden_boostedUntil_id_idx", // Hot carousel
+      "Chain_isBoosted_boostedUntil_idx", // sweeper (kept)
+      "Post_userId_createdAt_id_idx", // My posts
+    ])
+      expect(indexes, wanted).toContain(wanted);
+    expect(indexes).not.toContain("Chain_isFeatured_createdAt_idx"); // superseded
+    db.close();
+  });
+
   it("is idempotent where it matters: re-running the legacy UPDATE changes nothing", () => {
     const db = new DatabaseSync(join(dir, "legacy.db"));
     const before = JSON.stringify(

@@ -107,7 +107,13 @@ export async function buildApp(deps: Deps): Promise<FastifyInstance> {
 
   if (storage instanceof LocalDiskStorage) {
     mkdirSync(storage.root, { recursive: true });
-    await app.register(fastifyStatic, { root: resolve(storage.root), prefix: "/uploads/" });
+    await app.register(fastifyStatic, {
+      root: resolve(storage.root),
+      prefix: "/uploads/",
+      // every upload gets a fresh random name and is never modified, so browsers (and Telegram) may keep it forever
+      maxAge: "1y",
+      immutable: true,
+    });
   }
 
   app.setErrorHandler((err, req, reply) => {

@@ -23,6 +23,14 @@ import type { Deps } from "../app";
 import { requireAuth, user } from "../auth/plugin";
 import { errors } from "../errors";
 import { isTextAllowed } from "../moderation";
+import {
+  afterNewest,
+  afterTrending,
+  decodeNewest,
+  decodeTrending,
+  encodeNewest,
+  encodeTrending,
+} from "../pagination";
 import { publishPost, toPostDTO } from "../services/posts";
 import { toChainDTO } from "../services/chains";
 
@@ -101,47 +109,49 @@ export function registerChainRoutes(app: FastifyInstance, deps: Deps): void {
   app.get("/api/me/chains", { preHandler: requireAuth }, async (req): Promise<Page<ChainDTO>> => {
     const me = user(req);
     const q = listPostsQuerySchema.parse(req.query);
-    const offset = q.cursor ? Number(q.cursor) : 0;
-    if (!Number.isInteger(offset) || offset < 0) throw errors.badRequest("Bad cursor");
     const rows = await db.chain.findMany({
-      where: { creatorId: me.id, isHidden: false },
+      where: {
+        creatorId: me.id,
+        isHidden: false,
+        ...(q.cursor ? afterNewest(decodeNewest(q.cursor)) : {}),
+      },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-      skip: offset,
       take: PAGE + 1,
       include: { creator: true },
     });
     const t = now();
+    const items = rows.slice(0, PAGE);
+    const last = items.at(-1);
     return {
-      items: rows.slice(0, PAGE).map((c) => toChainDTO(c, { now: t, viewerId: me.id })),
-      nextCursor: rows.length > PAGE ? String(offset + PAGE) : null,
+      items: items.map((c) => toChainDTO(c, { now: t, viewerId: me.id })),
+      nextCursor: rows.length > PAGE && last ? encodeNewest(last) : null,
     };
   });
 
   app.get("/api/chains", { preHandler: requireAuth }, async (req): Promise<Page<ChainDTO>> => {
     const me = user(req);
     const q = listChainsQuerySchema.parse(req.query);
-    const offset = q.cursor ? Number(q.cursor) : 0;
-    if (!Number.isInteger(offset) || offset < 0) throw errors.badRequest("Bad cursor");
-    const orderBy =
-      q.sort === "new"
-        ? [{ createdAt: "desc" as const }, { id: "desc" as const }]
-        : q.sort === "featured"
-          ? [{ createdAt: "desc" as const }, { id: "desc" as const }]
-          : [
-              { postsCount: "desc" as const },
-              { createdAt: "desc" as const },
-              { id: "desc" as const },
-            ];
+    const trending = q.sort === "trending";
+    const orderBy = trending
+      ? [{ postsCount: "desc" as const }, { createdAt: "desc" as const }, { id: "desc" as const }]
+      : [{ createdAt: "desc" as const }, { id: "desc" as const }];
+    const after = q.cursor
+      ? trending
+        ? afterTrending(decodeTrending(q.cursor))
+        : afterNewest(decodeNewest(q.cursor))
+      : {};
     const rows = await db.chain.findMany({
-      where: { isHidden: false, ...(q.sort === "featured" ? { isFeatured: true } : {}) },
+      where: { isHidden: false, ...(q.sort === "featured" ? { isFeatured: true } : {}), ...after },
       orderBy,
-      skip: offset,
       take: PAGE + 1,
       include: { creator: true },
     });
+    const items = rows.slice(0, PAGE);
+    const last = items.at(-1);
     return {
-      items: rows.slice(0, PAGE).map((c) => toChainDTO(c, { now: now(), viewerId: me.id })),
-      nextCursor: rows.length > PAGE ? String(offset + PAGE) : null,
+      items: items.map((c) => toChainDTO(c, { now: now(), viewerId: me.id })),
+      nextCursor:
+        rows.length > PAGE && last ? (trending ? encodeTrending(last) : encodeNewest(last)) : null,
     };
   });
 
@@ -201,13 +211,17 @@ export function registerChainRoutes(app: FastifyInstance, deps: Deps): void {
     async (req): Promise<ChainDetailDTO> => {
       const me = user(req);
       const chain = await visibleChain(req.params.id);
-      const mine = await db.post.findUnique({
-        where: { chainId_userId: { chainId: chain.id, userId: me.id } },
-        include: { user: true },
-      });
+      // independent of each other: run them together
+      const [mine, posts] = await Promise.all([
+        db.post.findUnique({
+          where: { chainId_userId: { chainId: chain.id, userId: me.id } },
+          include: { user: true },
+        }),
+        postsPage(chain.id, undefined, me.id),
+      ]);
       return {
         chain: toChainDTO(chain, { now: now(), viewerId: me.id }),
-        posts: await postsPage(chain.id, undefined, me.id),
+        posts,
         hasJoined: !!mine,
         myPosition: mine?.position ?? null,
         myPost: mine && !mine.isHidden ? toPostDTO(mine, me.id) : null,
