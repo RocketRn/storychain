@@ -34,7 +34,7 @@ interface Call {
 
 /** A bot whose Bot API transport is replaced by a recorder (no network). */
 function recordingBot(config = env()): { bot: Bot; calls: Call[] } {
-  const bot = createBot(config, { botInfo });
+  const bot = createBot(config, { db: createDb(process.env.TEST_DATABASE_URL as string), botInfo });
   const calls: Call[] = [];
   bot.api.config.use(async (_prev, method, payload) => {
     calls.push({ method, payload: payload as Record<string, unknown> });

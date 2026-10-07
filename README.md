@@ -54,6 +54,29 @@ Vite proxies `/api` and `/uploads` to the API, so **one tunnel to the web dev se
 On Telegram clients older than 7.8 the app falls back to opening the image + copying the link.
 The manual checks per platform are listed in `CHECKLIST.md` (added in Phase 6).
 
+## Payments (PRO)
+
+PRO = 30 days (`proUntil`), 150 Stars or `GRM_PRO_30D_PRICE` GRM (placeholder `100` — **set the real price**).
+Prices/plans are data in `packages/shared/src/plans.ts`; amounts are bigint/string in smallest units (`toUnits`/`fromUnits`).
+
+- **Mock mode:** the paywall's Stars button opens a fake Stars dialog (Pay / Cancel / Fail) and the GRM section is a
+  "Simulate GRM payment" panel. Both go through the real server code (order -> `POST /api/dev/payments/:ref/complete`
+  -> ledger -> PRO), no Telegram/TON/network needed.
+- **Telegram Stars (real):** needs the bot running (`BOT_ENABLED=true`). The bot answers `pre_checkout_query`, grants PRO on
+  `successful_payment` (idempotent on `telegram_payment_charge_id`) and revokes on `refunded_payment`.
+  Refund: `pnpm --filter @storychain/api refund <reference|chargeId>`.
+- **GRM on TON (real):** set `TON_MERCHANT_ADDRESS`, `TONAPI_KEY`, `TON_NETWORK`, and (mainnet) keep the GRAM master from
+  `.env.example`. The user connects a wallet via TonConnect and signs a TEP-74 Jetton transfer whose forward payload is the
+  payment reference; a background job (every 10 s) matches incoming transfers on the merchant address via TonAPI.
+  On startup the API checks the jetton's on-chain decimals against `GRM_DECIMALS` and **refuses to start on a mismatch**.
+  `pnpm dev`/`build` generate `apps/web/public/tonconnect-manifest.json` from `WEBAPP_URL` (must be a public HTTPS origin for real wallets).
+- **Testnet:** the real GRAM jetton exists on mainnet only. For a testnet run set `TON_NETWORK=testnet` and point
+  `GRM_JETTON_MASTER` at a self-deployed test jetton: deploy a standard TEP-74 minter (e.g. with the
+  [Blueprint](https://github.com/ton-org/blueprint) jetton template or the tonviewer/minter web tools), mint some tokens to a
+  testnet wallet, and use a testnet merchant wallet address. Mock mode covers everything else without any chain.
+- **Platform policy:** by default GRM is hidden/forbidden on iOS/Android (Stars only). Override with
+  `TON_PAYMENTS_ALL_PLATFORMS=true`. **The owner must verify this against Telegram's current rules for digital goods.**
+
 ## Card editor
 
 `/chain/:id/join` opens the editor: pick/take a photo, pan/pinch/scroll to frame it, choose a template and font

@@ -2,6 +2,8 @@ import { Bot, InlineKeyboard, type Context } from "grammy";
 import type { UserFromGetMe } from "grammy/types";
 import { parseStartParam } from "@storychain/shared";
 import type { Config } from "../config";
+import type { Db } from "../db";
+import { registerPaymentHandlers } from "../payments/stars";
 
 type Lang = "ru" | "en";
 const TEXTS: Record<Lang, { welcome: string; chain: string; open: string; openChain: string }> = {
@@ -49,8 +51,9 @@ export function registerStartHandlers(bot: Bot, config: Config): void {
   });
 }
 
-export function createBot(config: Config, opts: { botInfo?: UserFromGetMe } = {}): Bot {
+export function createBot(config: Config, opts: { db: Db; botInfo?: UserFromGetMe }): Bot {
   const bot = new Bot(config.botToken, opts.botInfo ? { botInfo: opts.botInfo } : {});
+  registerPaymentHandlers(bot, { db: opts.db, config }); // before the catch-all text handler
   registerStartHandlers(bot, config);
   bot.catch((err) => console.error("[bot] handler error:", err.message));
   return bot;

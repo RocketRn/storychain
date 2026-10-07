@@ -50,6 +50,7 @@ export default function MockUI() {
       )}
       {ui.story && <StoryPreview story={ui.story} />}
       {ui.tgLink && <TgLinkModal url={ui.tgLink} />}
+      {ui.invoice && <InvoiceDialog invoice={ui.invoice} />}
       {ui.dialog && <DialogModal dialog={ui.dialog} />}
       <DevTools />
     </>
@@ -157,6 +158,52 @@ function StoryPreview({ story }: { story: NonNullable<MockUiState["story"]> }) {
             onClick={mockUi.closeStory}
           >
             Close
+          </button>
+        </div>
+      </div>
+    </Overlay>
+  );
+}
+
+/** Fake Telegram Stars checkout. "Pay" runs the REAL server-side grant path (dev completion -> successful_payment handler). */
+function InvoiceDialog({ invoice }: { invoice: NonNullable<MockUiState["invoice"]> }) {
+  const [busy, setBusy] = useState(false);
+  const reference = invoice.url.replace("mock-invoice://", "");
+  const pay = async () => {
+    setBusy(true);
+    try {
+      await dev(`payments/${reference}/complete`, {});
+      mockUi.resolveInvoice("paid");
+    } catch {
+      mockUi.resolveInvoice("failed");
+    }
+  };
+  return (
+    <Overlay label="Stars payment (mock)">
+      <div className="w-full max-w-sm space-y-3 rounded-2xl bg-neutral-900 p-4 text-sm text-white">
+        <div className="text-base font-semibold">⭐ Telegram Stars payment (mock)</div>
+        <div className="break-all text-xs opacity-70">order {reference}</div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            disabled={busy}
+            className="flex-1 rounded-lg bg-yellow-400 px-2 py-2 font-semibold text-black disabled:opacity-50"
+            onClick={() => void pay()}
+          >
+            Pay
+          </button>
+          <button
+            disabled={busy}
+            className="flex-1 rounded-lg bg-white/15 px-2 py-2"
+            onClick={() => mockUi.resolveInvoice("cancelled")}
+          >
+            Cancel
+          </button>
+          <button
+            disabled={busy}
+            className="flex-1 rounded-lg bg-red-600 px-2 py-2"
+            onClick={() => mockUi.resolveInvoice("failed")}
+          >
+            Fail
           </button>
         </div>
       </div>

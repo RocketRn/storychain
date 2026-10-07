@@ -1,7 +1,7 @@
 import sharp from "sharp";
 import type { FastifyInstance } from "fastify";
 import { loadConfig } from "../src/config";
-import { buildApp } from "../src/app";
+import { buildApp, type Deps } from "../src/app";
 import { createDb, type Db } from "../src/db";
 import { signInitData } from "../src/auth/initData";
 import type { Storage } from "../src/storage";
@@ -25,9 +25,13 @@ export interface TestCtx {
   app: FastifyInstance;
   db: Db;
   storage: MemoryStorage;
+  config: Deps["config"];
 }
 
-export async function createCtx(env: Record<string, string> = {}): Promise<TestCtx> {
+export async function createCtx(
+  env: Record<string, string> = {},
+  extra: Partial<Deps> = {},
+): Promise<TestCtx> {
   const config = loadConfig({
     NODE_ENV: "test",
     DEV_MODE: "true",
@@ -37,9 +41,9 @@ export async function createCtx(env: Record<string, string> = {}): Promise<TestC
   } as NodeJS.ProcessEnv);
   const db = createDb(process.env.TEST_DATABASE_URL as string);
   const storage = new MemoryStorage();
-  const app = await buildApp({ config, db, storage });
+  const app = await buildApp({ config, db, storage, ...extra });
   await app.ready();
-  return { app, db, storage };
+  return { app, db, storage, config };
 }
 
 let nextId = 5_000_000 + Math.floor(Math.random() * 1_000_000);

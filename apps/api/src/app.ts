@@ -18,6 +18,10 @@ import { LocalDiskStorage } from "./storage/local";
 import { registerChainRoutes } from "./routes/chains";
 import { registerMiscRoutes } from "./routes/misc";
 import { registerDevRoutes } from "./routes/dev";
+import { registerPaymentRoutes } from "./routes/payments";
+import type { TonIndexer } from "./payments/tonIndexer";
+import type { TonVerifier } from "./payments/tonVerifier";
+import type { CreateInvoiceLink } from "./payments/stars";
 
 export interface Deps {
   config: Config;
@@ -25,6 +29,11 @@ export interface Deps {
   storage: Storage;
   /** Telegram bot; when present and BOT_MODE=webhook, updates are accepted on /api/telegram/webhook */
   bot?: Bot;
+  /** TON indexer (TonAPI by default); absent in mock mode */
+  indexer?: TonIndexer;
+  verifier?: TonVerifier;
+  /** override of the Stars invoice-link creator (tests) */
+  createInvoiceLink?: CreateInvoiceLink;
 }
 
 export async function buildApp(deps: Deps): Promise<FastifyInstance> {
@@ -87,6 +96,7 @@ export async function buildApp(deps: Deps): Promise<FastifyInstance> {
 
   registerMiscRoutes(app, deps);
   registerChainRoutes(app, deps);
+  registerPaymentRoutes(app, deps);
   if (config.devMode && !config.isProd) registerDevRoutes(app, deps);
   if (deps.bot && config.botMode === "webhook") {
     // grammY verifies the X-Telegram-Bot-Api-Secret-Token header against `secretToken`

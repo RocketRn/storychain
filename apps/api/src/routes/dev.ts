@@ -4,6 +4,9 @@ import type { Deps } from "../app";
 import { signInitData } from "../auth/initData";
 import { errors } from "../errors";
 import { utcDay } from "../services/users";
+import { settlePayment } from "../payments/ledger";
+import { handleSuccessfulPayment } from "../payments/stars";
+import { nanoid } from "nanoid";
 
 /** Matches prisma/seed.ts so names do not flip when the profile is refreshed on auth. */
 const DEMO_NAMES = ["Anna", "Boris", "Clara", "Dmitri"];
@@ -60,6 +63,38 @@ export function registerDevRoutes(app: FastifyInstance, deps: Deps): void {
     await db.user.update({ where: { id: user.id }, data: { proUntil } });
     return { proUntil: proUntil?.toISOString() ?? null };
   });
+
+  /**
+   * Simulates the provider confirming a payment so the whole server-side grant path runs without Telegram/TON:
+   *  - stars: goes through the same handler as the bot's `successful_payment` (amount/user validation included)
+   *  - ton_grm: settles like the verifier would after matching an on-chain transfer
+   */
+  app.post<{ Params: { reference: string } }>(
+    "/api/dev/payments/:reference/complete",
+    async (req) => {
+      const tx = await db.transaction.findUnique({
+        where: { reference: req.params.reference },
+        include: { user: true },
+      });
+      if (!tx) throw errors.paymentNotFound();
+      if (tx.provider === "stars") {
+        const res = await handleSuccessfulPayment(db, Number(tx.user.telegramId), {
+          currency: tx.currency,
+          total_amount: Number(tx.amount),
+          invoice_payload: tx.reference,
+          telegram_payment_charge_id: `dev_charge_${nanoid(12)}`,
+        });
+        return { outcome: res.outcome };
+      }
+      const res = await settlePayment(db, {
+        reference: tx.reference,
+        externalId: `dev_tx_${nanoid(16)}`,
+        rawJson: { dev: true },
+        allowExpired: false,
+      });
+      return { outcome: res.outcome };
+    },
+  );
 
   app.post("/api/dev/reset-usage", async (req) => {
     const body = target.parse(req.body);

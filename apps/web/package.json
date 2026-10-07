@@ -7,11 +7,16 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "predev": "node scripts/gen-manifest.mjs",
+    "prebuild": "node scripts/gen-manifest.mjs"
   },
   "dependencies": {
     "@storychain/shared": "workspace:*",
     "@tanstack/react-query": "^5.104.1",
+    "@ton/core": "^0.63.1",
+    "@tonconnect/ui-react": "^3.0.2",
+    "buffer": "^6.0.3",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.30.6"

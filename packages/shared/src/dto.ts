@@ -88,3 +88,37 @@ export interface PlansDTO {
   features: { free: string[]; pro: string[] };
   freeDailyLimit: number;
 }
+
+export type PaymentStatus = "pending" | "paid" | "failed" | "expired" | "refunded";
+
+export interface StarsInvoiceDTO {
+  invoiceUrl: string;
+  reference: string;
+}
+
+/** Everything the client needs to build the TEP-74 Jetton transfer. Amounts are smallest-unit strings. */
+export interface TonIntentDTO {
+  reference: string;
+  jettonMaster: string;
+  merchantAddress: string;
+  amount: string;
+  decimals: number;
+  /** nanoTON forwarded with the transfer notification (so the merchant wallet sees the comment) */
+  forwardTonAmount: string;
+  /** nanoTON attached to the message sent to the user's Jetton wallet (gas) */
+  gasAmount: string;
+  expiresAt: string;
+}
+
+export interface PaymentStatusDTO {
+  reference: string;
+  provider: string;
+  planId: string;
+  status: PaymentStatus;
+  amount: string;
+  currency: string;
+  expiresAt: string;
+  paidAt: string | null;
+  isPro: boolean;
+  proUntil: string | null;
+}

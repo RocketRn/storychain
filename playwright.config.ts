@@ -4,9 +4,12 @@ import { defineConfig, devices } from "@playwright/test";
 const API_PORT = 3100;
 const WEB_PORT = 5273;
 const WEB = `http://localhost:${WEB_PORT}`;
+// Second web server WITHOUT the mock: exercises the real Telegram facade + lazy TonConnect chunk
+const REAL_WEB_PORT = 5274;
 // The sandbox ships a Chromium build that may differ from the one this Playwright version expects.
 const PREINSTALLED = "/opt/pw-browsers/chromium-1194/chrome-linux/chrome";
-const executablePath = process.env.PW_CHROMIUM ?? (existsSync(PREINSTALLED) ? PREINSTALLED : undefined);
+const executablePath =
+  process.env.PW_CHROMIUM ?? (existsSync(PREINSTALLED) ? PREINSTALLED : undefined);
 
 export default defineConfig({
   testDir: "./e2e",
@@ -44,6 +47,17 @@ export default defineConfig({
       timeout: 60_000,
       reuseExistingServer: false,
       env: { API_PROXY_TARGET: `http://localhost:${API_PORT}`, VITE_DEV_MOCK: "true" },
+    },
+    {
+      command: `node apps/web/scripts/gen-manifest.mjs && pnpm --filter @storychain/web exec vite --port ${REAL_WEB_PORT} --strictPort`,
+      url: `http://localhost:${REAL_WEB_PORT}`,
+      timeout: 60_000,
+      reuseExistingServer: false,
+      env: {
+        API_PROXY_TARGET: `http://localhost:${API_PORT}`,
+        VITE_DEV_MOCK: "false",
+        VITE_BOT_USERNAME: "storychain_bot",
+      },
     },
   ],
 });

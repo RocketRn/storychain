@@ -52,3 +52,11 @@ export function buildShareLink(opts: {
   const path = opts.appShortName ? `${opts.botUsername}/${opts.appShortName}` : opts.botUsername;
   return `https://t.me/${path}?startapp=chain_${opts.chainId}`;
 }
+
+export const planIdSchema = z.enum(["pro_30d"]);
+export const createPaymentSchema = z.object({ planId: planIdSchema });
+export const tonConfirmSchema = z.object({
+  reference: z.string().regex(/^[A-Za-z0-9]{8,32}$/),
+  /** optional BOC returned by the wallet; informational only (never trusted for verification) */
+  boc: z.string().max(8192).optional(),
+});

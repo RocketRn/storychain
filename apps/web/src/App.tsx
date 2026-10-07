@@ -7,7 +7,7 @@ import { tg } from "./lib/tg";
 import { Home } from "./screens/Home";
 import { ChainScreen } from "./screens/Chain";
 import { CreateChain } from "./screens/CreateChain";
-import { Placeholder } from "./screens/Placeholder";
+import { Paywall } from "./screens/Paywall";
 
 // The editor (canvas, fonts, templates) is code-split: it is only needed when joining a chain
 const Editor = lazy(() => import("./screens/Editor"));
@@ -68,7 +68,7 @@ function Shell() {
               </Suspense>
             }
           />
-          <Route path="/pro" element={<Placeholder emoji="⭐" />} />
+          <Route path="/pro" element={<Paywall />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       )}
