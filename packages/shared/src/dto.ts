@@ -22,6 +22,15 @@ export interface ChainDTO {
   postsCount: number;
   createdAt: string;
   creator: PublicUserDTO;
+  /** computed server-side as `boostedUntil > now` (the cached DB flag is never trusted alone) */
+  isBoosted: boolean;
+  /** only meaningful to the creator in the UI; public clients must not show the remaining time */
+  boostedUntil: string | null;
+  /**
+   * Normalized t.me link of the creator's channel. Public ONLY while the chain is boosted;
+   * the creator always sees their own.
+   */
+  channelUrl: string | null;
 }
 
 export interface PostDTO {
@@ -44,16 +53,8 @@ export interface Page<T> {
   nextCursor: string | null;
 }
 
-export interface UsageDTO {
-  /** null = unlimited (PRO) */
-  dailyLimit: number | null;
-  usedToday: number;
-}
-
-export interface SessionDTO extends UsageDTO {
+export interface SessionDTO {
   user: UserDTO;
-  isPro: boolean;
-  proUntil: string | null;
 }
 
 export interface ChainDetailDTO {
@@ -74,19 +75,19 @@ export interface CreatePostResultDTO {
   shareLink: string;
 }
 
-export interface PlanPriceDTO {
+export interface BoostPlanDTO {
   id: string;
-  durationDays: number;
-  stars: { amount: string; currency: "XTR" };
-  grm: { amount: string; human: string; decimals: number; symbol: string; currency: "GRM" };
+  durationHours: number;
+  prices: {
+    stars: number;
+    grm: { amount: string; decimals: number; symbol: string; display: string };
+  };
 }
 
 export interface PlansDTO {
-  plans: PlanPriceDTO[];
+  boostPlans: BoostPlanDTO[];
   /** payment methods allowed for the caller's platform */
   methods: Array<"stars" | "ton_grm">;
-  features: { free: string[]; pro: string[] };
-  freeDailyLimit: number;
 }
 
 export type PaymentStatus = "pending" | "paid" | "failed" | "expired" | "refunded";
@@ -94,11 +95,15 @@ export type PaymentStatus = "pending" | "paid" | "failed" | "expired" | "refunde
 export interface StarsInvoiceDTO {
   invoiceUrl: string;
   reference: string;
+  chainId: string;
+  planId: string;
 }
 
 /** Everything the client needs to build the TEP-74 Jetton transfer. Amounts are smallest-unit strings. */
 export interface TonIntentDTO {
   reference: string;
+  chainId: string;
+  planId: string;
   jettonMaster: string;
   merchantAddress: string;
   amount: string;
@@ -119,8 +124,9 @@ export interface PaymentStatusDTO {
   currency: string;
   expiresAt: string;
   paidAt: string | null;
-  isPro: boolean;
-  proUntil: string | null;
+  chainId: string | null;
+  /** the chain's current `boostedUntil` (null if not boosted) */
+  boostedUntil: string | null;
 }
 
 /** A post in "my posts" with its chain, for the Profile screen. */

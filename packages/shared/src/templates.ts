@@ -54,7 +54,6 @@ export type Decoration =
 export interface Template {
   id: string;
   name: string;
-  isPremium: boolean;
   background: TemplateBackground;
   photoFrame: PhotoFrame;
   stickerStyle: StickerStyle;
@@ -86,7 +85,6 @@ export const TEMPLATES: readonly Template[] = [
   {
     id: "sunset",
     name: "Sunset",
-    isPremium: false,
     background: {
       type: "gradient",
       angleDeg: 160,
@@ -104,7 +102,6 @@ export const TEMPLATES: readonly Template[] = [
   {
     id: "ocean",
     name: "Ocean",
-    isPremium: false,
     background: {
       type: "gradient",
       angleDeg: 180,
@@ -122,7 +119,6 @@ export const TEMPLATES: readonly Template[] = [
   {
     id: "minimal-light",
     name: "Minimal",
-    isPremium: false,
     background: { type: "solid", color: "#f4f1ea" },
     photoFrame: frame({ radius: 12 }),
     stickerStyle: sticker({ fill: "#111111", text: "#ffffff", accent: "#f4f1ea" }),
@@ -133,7 +129,6 @@ export const TEMPLATES: readonly Template[] = [
   {
     id: "polaroid",
     name: "Polaroid",
-    isPremium: false,
     background: { type: "solid", color: "#2b2b2f" },
     photoFrame: frame({
       x: 120,
@@ -152,7 +147,6 @@ export const TEMPLATES: readonly Template[] = [
   {
     id: "neon",
     name: "Neon",
-    isPremium: true,
     background: {
       type: "gradient",
       angleDeg: 180,
@@ -170,7 +164,6 @@ export const TEMPLATES: readonly Template[] = [
   {
     id: "film-strip",
     name: "Film strip",
-    isPremium: true,
     background: { type: "solid", color: "#111111" },
     photoFrame: frame({ x: 150, w: 780, radius: 4 }),
     stickerStyle: sticker({ accent: "#ffcc00" }),
@@ -184,7 +177,6 @@ export const TEMPLATES: readonly Template[] = [
   {
     id: "aurora",
     name: "Aurora",
-    isPremium: true,
     background: {
       type: "gradient",
       angleDeg: 135,
@@ -203,7 +195,6 @@ export const TEMPLATES: readonly Template[] = [
   {
     id: "retro-pop",
     name: "Retro pop",
-    isPremium: true,
     background: { type: "solid", color: "#ffd23f" },
     photoFrame: frame({ radius: 24, rotationDeg: 2, border: { width: 14, color: "#111111" } }),
     stickerStyle: sticker({ fill: "#ee4266", text: "#ffffff", accent: "#111111" }),
@@ -217,9 +208,15 @@ export function getTemplate(id: string): Template | undefined {
   return TEMPLATES.find((t) => t.id === id);
 }
 
-export const FREE_FONTS = ["Inter", "Manrope"] as const;
-export const PREMIUM_FONTS = ["Unbounded", "Oswald", "Playfair Display", "Pacifico"] as const;
-export const ALL_FONTS: readonly string[] = [...FREE_FONTS, ...PREMIUM_FONTS];
+/** Every font and template is available to everyone. */
+export const ALL_FONTS = [
+  "Inter",
+  "Manrope",
+  "Unbounded",
+  "Oswald",
+  "Playfair Display",
+  "Pacifico",
+] as const;
 /** Weight self-hosted for each family (one weight per family keeps the bundle small). */
 export const FONT_WEIGHTS: Record<string, number> = {
   Inter: 700,
@@ -229,5 +226,3 @@ export const FONT_WEIGHTS: Record<string, number> = {
   "Playfair Display": 700,
   Pacifico: 400,
 };
-export const isPremiumFont = (f: string): boolean =>
-  (PREMIUM_FONTS as readonly string[]).includes(f);

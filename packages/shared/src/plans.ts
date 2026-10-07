@@ -1,22 +1,20 @@
-import { toUnits } from "./units";
-
 export type PaymentProvider = "stars" | "ton_grm";
 
-export interface PlanDef {
-  id: string;
-  durationDays: number;
-  starsPrice: number; // integer Stars (XTR)
-}
+/**
+ * Marathon Boost plans. Star prices here are DEFAULTS (placeholders the owner must set);
+ * the API can override them with STARS_BOOST_24H_PRICE / STARS_BOOST_7D_PRICE.
+ * GRM prices come from env (GRM_BOOST_*_PRICE) and are converted with `toUnits`, never floats.
+ */
+export const BOOST_PLANS = {
+  boost_24h: { id: "boost_24h", durationMs: 24 * 3600 * 1000, starsPrice: 100 },
+  boost_7d: { id: "boost_7d", durationMs: 7 * 24 * 3600 * 1000, starsPrice: 500 },
+} as const;
 
-/** Plans are data. GRM price comes from env at runtime (see `grmPriceUnits`). */
-export const PLANS: Record<string, PlanDef> = {
-  pro_30d: { id: "pro_30d", durationDays: 30, starsPrice: 150 },
-};
+export type BoostPlanId = keyof typeof BOOST_PLANS;
+export const BOOST_PLAN_IDS = Object.keys(BOOST_PLANS) as BoostPlanId[];
 
-export const FREE_DAILY_LIMIT = 3;
-
-export function grmPriceUnits(humanPrice: string, decimals: number): bigint {
-  return toUnits(humanPrice, decimals);
+export function isBoostPlanId(id: string): id is BoostPlanId {
+  return Object.prototype.hasOwnProperty.call(BOOST_PLANS, id);
 }
 
 export type Platform = "ios" | "android" | "tdesktop" | "macos" | "weba" | "web" | "unknown";

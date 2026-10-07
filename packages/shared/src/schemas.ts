@@ -4,15 +4,42 @@ import {
   CHAIN_EMOJI_MAX,
   CHAIN_TITLE_MAX,
   CHAIN_TITLE_MIN,
+  CHANNEL_URL_MAX,
+  parseChannelUrl,
 } from "./helpers";
 
 export const chainIdSchema = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
+
+/** Raw string in, normalized `string | null` out ("" -> null). Failing issues carry the message INVALID_CHANNEL_URL. */
+export const channelUrlSchema = z
+  .string()
+  .max(CHANNEL_URL_MAX + 20, "INVALID_CHANNEL_URL") // let the parser decide on the real limit after trimming
+  .transform((v, ctx): string | null => {
+    const r = parseChannelUrl(v);
+    if (!r.ok) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "INVALID_CHANNEL_URL" });
+      return z.NEVER;
+    }
+    return r.value;
+  });
 
 export const createChainSchema = z.object({
   title: z.string().trim().min(CHAIN_TITLE_MIN).max(CHAIN_TITLE_MAX),
   description: z.string().trim().max(CHAIN_DESCRIPTION_MAX).optional(),
   emoji: z.string().trim().max(CHAIN_EMOJI_MAX).optional(),
+  channelUrl: channelUrlSchema.optional(),
 });
+
+/** Creator-only edit. The title is NOT editable: it is printed on already shared cards. */
+export const patchChainSchema = z
+  .object({
+    channelUrl: channelUrlSchema.nullable().optional(),
+    emoji: z.string().trim().max(CHAIN_EMOJI_MAX).nullable().optional(),
+    description: z.string().trim().max(CHAIN_DESCRIPTION_MAX).nullable().optional(),
+  })
+  .strict()
+  .refine((v) => Object.keys(v).length > 0, { message: "Nothing to update" });
+export type PatchChainInput = z.infer<typeof patchChainSchema>;
 export type CreateChainInput = z.infer<typeof createChainSchema>;
 
 export const listChainsQuerySchema = z.object({
@@ -28,8 +55,6 @@ export const listPostsQuerySchema = z.object({
 export const createPostFieldsSchema = z.object({
   templateId: z.string().min(1).max(64),
   caption: z.string().trim().max(200).optional(),
-  /** Font used on the card (premium fonts require PRO; the card itself is rendered client-side). */
-  fontFamily: z.string().max(40).optional(),
 });
 export type CreatePostFields = z.infer<typeof createPostFieldsSchema>;
 
@@ -41,8 +66,11 @@ export const reportSchema = z
   })
   .refine((v) => v.chainId || v.postId, { message: "chainId or postId required" });
 
-export const planIdSchema = z.enum(["pro_30d"]);
-export const createPaymentSchema = z.object({ planId: planIdSchema });
+/** Boost purchase. `planId` is validated by the route against BOOST_PLANS (-> INVALID_BOOST_PLAN). */
+export const createPaymentSchema = z.object({
+  chainId: chainIdSchema,
+  planId: z.string().min(1).max(32),
+});
 export const tonConfirmSchema = z.object({
   reference: z.string().regex(/^[A-Za-z0-9]{8,32}$/),
   /** optional BOC returned by the wallet; informational only (never trusted for verification) */

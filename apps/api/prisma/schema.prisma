@@ -16,14 +16,11 @@ model User {
   firstName     String
   languageCode  String?
   isTgPremium   Boolean        @default(false)
-  proUntil      DateTime?
   createdAt     DateTime       @default(now())
   lastSeenAt    DateTime       @default(now())
   chains        Chain[]
   posts         Post[]
   transactions  Transaction[]
-  subscriptions Subscription[]
-  usage         DailyUsage[]
 }
 
 model Chain {
@@ -39,7 +36,17 @@ model Chain {
   createdAt   DateTime @default(now())
   posts       Post[]
 
+  /// normalized "https://t.me/<name>" or "https://t.me/+<invite>" only; public only while boosted
+  channelUrl   String?
+  /// denormalized CACHE of "boostedUntil > now". Never trust it alone.
+  isBoosted    Boolean       @default(false)
+  /// SOURCE OF TRUTH: the chain is boosted iff boostedUntil > now
+  boostedUntil DateTime?
+  boosts       ChainBoost[]
+  transactions Transaction[]
+
   @@index([isFeatured, createdAt])
+  @@index([isBoosted, boostedUntil])
 }
 
 model Post {
@@ -62,16 +69,6 @@ model Post {
   @@index([chainId, position])
 }
 
-model DailyUsage {
-  id     String @id @default(cuid())
-  userId String
-  day    String
-  count  Int    @default(0)
-  user   User   @relation(fields: [userId], references: [id])
-
-  @@unique([userId, day])
-}
-
 model Transaction {
   id         String    @id @default(cuid())
   userId     String
@@ -86,19 +83,29 @@ model Transaction {
   createdAt  DateTime  @default(now())
   paidAt     DateTime?
   expiresAt  DateTime
+  /// required for boost purchases; nullable only for legacy rows
+  chainId    String?
+  chain      Chain?    @relation(fields: [chainId], references: [id])
   user       User      @relation(fields: [userId], references: [id])
 
   @@index([status, provider])
+  @@index([chainId])
 }
 
-model Subscription {
-  id       String   @id @default(cuid())
-  userId   String
-  planId   String
-  startsAt DateTime
-  endsAt   DateTime
-  txId     String
-  user     User     @relation(fields: [userId], references: [id])
+model ChainBoost {
+  id        String   @id @default(cuid())
+  chainId   String
+  userId    String
+  /// "boost_24h" | "boost_7d"
+  planId    String
+  startsAt  DateTime
+  endsAt    DateTime
+  /// one boost per paid transaction (idempotency)
+  txId      String   @unique
+  createdAt DateTime @default(now())
+  chain     Chain    @relation(fields: [chainId], references: [id])
+
+  @@index([chainId, endsAt])
 }
 
 model Report {

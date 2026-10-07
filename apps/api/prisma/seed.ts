@@ -1,4 +1,4 @@
-/* Seeds demo users (telegramId 1000001..1000004 = mock_user 1..4), featured chains and a few posts. */
+/* Seeds demo users (telegramId 1000001..1000004 = mock_user 1..4), featured + boosted chains and a few posts. */
 import sharp from "sharp";
 import { loadConfig } from "../src/config";
 import { createDb } from "../src/db";
@@ -15,6 +15,36 @@ const CHAINS = [
   { id: "desk0002", title: "Your desk right now", emoji: "🖥️" },
   { id: "trk00003", title: "Track of the day", emoji: "🎧" },
 ];
+const HOUR = 3_600_000;
+const now = Date.now();
+/** Boost demos (all created by Anna = mock_user 1). Boost state is refreshed on every seed run. */
+const BOOSTED = [
+  {
+    id: "hot00001",
+    title: "Channel marathon: best shot of the week",
+    emoji: "🔥",
+    channelUrl: "https://t.me/storychain_demo",
+    planId: "boost_7d",
+    endsAt: new Date(now + 7 * 24 * HOUR),
+  },
+  {
+    id: "hot00002",
+    title: "Morning coffee ritual",
+    emoji: "☕",
+    channelUrl: null,
+    planId: "boost_24h",
+    endsAt: new Date(now + 24 * HOUR),
+  },
+  // boost already over: must NOT appear in the carousel and must not leak its channel link
+  {
+    id: "old00003",
+    title: "Last week's challenge",
+    emoji: "📅",
+    channelUrl: "https://t.me/storychain_demo",
+    planId: "boost_24h",
+    endsAt: new Date(now - 24 * HOUR),
+  },
+] as const;
 const COLORS = ["#ff9a62", "#2193b0", "#7b2ff7", "#ee4266", "#06d6a0"];
 
 async function card(color: string, label: string): Promise<Buffer> {
@@ -64,7 +94,43 @@ for (const c of CHAINS) {
     );
   }
 }
-// Demo posts must not eat the demo users' daily quota
-await db.dailyUsage.deleteMany({ where: { userId: { in: users.map((u) => u.id) } } });
+
+for (const b of BOOSTED) {
+  const active = b.endsAt.getTime() > now;
+  const boostData = { channelUrl: b.channelUrl, boostedUntil: b.endsAt, isBoosted: active };
+  const chain = await db.chain.upsert({
+    where: { id: b.id },
+    create: { id: b.id, title: b.title, emoji: b.emoji, creatorId: owner.id, ...boostData },
+    update: boostData,
+  });
+  const startsAt = new Date(b.endsAt.getTime() - (b.planId === "boost_7d" ? 7 * 24 : 24) * HOUR);
+  await db.chainBoost.upsert({
+    where: { txId: `seed_${b.id}` },
+    create: {
+      chainId: chain.id,
+      userId: owner.id,
+      planId: b.planId,
+      startsAt,
+      endsAt: b.endsAt,
+      txId: `seed_${b.id}`,
+    },
+    update: { startsAt, endsAt: b.endsAt },
+  });
+  for (const [i, u] of users.entries()) {
+    const exists = await db.post.findUnique({
+      where: { chainId_userId: { chainId: chain.id, userId: u.id } },
+    });
+    if (exists || i >= 3) continue;
+    await publishPost(
+      { db, storage },
+      {
+        user: u,
+        chain,
+        image: await card(COLORS[(i + 2) % COLORS.length]!, b.emoji),
+        fields: { templateId: "ocean" },
+      },
+    );
+  }
+}
 console.log("Seeded.");
 await db.$disconnect();
