@@ -18,3 +18,14 @@ export const FREE_DAILY_LIMIT = 3;
 export function grmPriceUnits(humanPrice: string, decimals: number): bigint {
   return toUnits(humanPrice, decimals);
 }
+
+export type Platform = "ios" | "android" | "tdesktop" | "macos" | "weba" | "web" | "unknown";
+
+/**
+ * Telegram requires Stars for digital goods in app-store builds (ios/android).
+ * Owner must verify against current Telegram rules (see DECISIONS.md).
+ */
+export function allowedMethods(platform: string | undefined, allPlatforms: boolean): PaymentProvider[] {
+  if (allPlatforms) return ["stars", "ton_grm"];
+  return platform === "ios" || platform === "android" ? ["stars"] : ["stars", "ton_grm"];
+}

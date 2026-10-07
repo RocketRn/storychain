@@ -1,5 +1,5 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": { "noEmit": true, "lib": ["ES2022"], "types": ["node"] },
-  "include": ["src", "scripts"]
+  "include": ["src", "scripts", "test", "prisma/seed.ts", "vitest.config.ts"]
 }

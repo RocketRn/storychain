@@ -1,0 +1,111 @@
+// SQLite in dev. For production PostgreSQL: change `provider` to "postgresql" (see README).
+// No Prisma enums / provider-specific features: enum-like values are Strings validated by zod.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String         @id @default(cuid())
+  telegramId    BigInt         @unique
+  username      String?
+  firstName     String
+  languageCode  String?
+  isTgPremium   Boolean        @default(false)
+  proUntil      DateTime?
+  createdAt     DateTime       @default(now())
+  lastSeenAt    DateTime       @default(now())
+  chains        Chain[]
+  posts         Post[]
+  transactions  Transaction[]
+  subscriptions Subscription[]
+  usage         DailyUsage[]
+}
+
+model Chain {
+  id          String   @id
+  title       String
+  description String?
+  emoji       String?
+  creatorId   String
+  creator     User     @relation(fields: [creatorId], references: [id])
+  isFeatured  Boolean  @default(false)
+  isHidden    Boolean  @default(false)
+  postsCount  Int      @default(0)
+  createdAt   DateTime @default(now())
+  posts       Post[]
+
+  @@index([isFeatured, createdAt])
+}
+
+model Post {
+  id            String   @id @default(cuid())
+  chainId       String
+  userId        String
+  position      Int
+  imageUrl      String
+  thumbUrl      String
+  templateId    String
+  caption       String?
+  watermarked   Boolean
+  sharedToStory Boolean  @default(false)
+  isHidden      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  chain         Chain    @relation(fields: [chainId], references: [id])
+  user          User     @relation(fields: [userId], references: [id])
+
+  @@unique([chainId, userId])
+  @@index([chainId, position])
+}
+
+model DailyUsage {
+  id     String @id @default(cuid())
+  userId String
+  day    String
+  count  Int    @default(0)
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@unique([userId, day])
+}
+
+model Transaction {
+  id         String    @id @default(cuid())
+  userId     String
+  provider   String
+  planId     String
+  status     String
+  amount     String
+  currency   String
+  reference  String    @unique
+  externalId String?   @unique
+  rawJson    String?
+  createdAt  DateTime  @default(now())
+  paidAt     DateTime?
+  expiresAt  DateTime
+  user       User      @relation(fields: [userId], references: [id])
+
+  @@index([status, provider])
+}
+
+model Subscription {
+  id       String   @id @default(cuid())
+  userId   String
+  planId   String
+  startsAt DateTime
+  endsAt   DateTime
+  txId     String
+  user     User     @relation(fields: [userId], references: [id])
+}
+
+model Report {
+  id         String   @id @default(cuid())
+  reporterId String
+  chainId    String?
+  postId     String?
+  reason     String
+  createdAt  DateTime @default(now())
+}
