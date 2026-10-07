@@ -25,6 +25,7 @@
     "@storychain/shared": "workspace:*",
     "fastify": "^5.2.0",
     "fastify-plugin": "^6.0.0",
+    "grammy": "^1.46.0",
     "nanoid": "^5.1.16",
     "pino": "^9.6.0",
     "sharp": "^0.35.5",

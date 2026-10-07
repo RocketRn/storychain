@@ -12,6 +12,7 @@ const schema = z.object({
   BOT_TOKEN: z.string().default(""),
   BOT_USERNAME: z.string().default("storychain_bot"),
   APP_SHORT_NAME: z.string().default(""),
+  BOT_ENABLED: z.enum(["true", "false"]).optional(),
   BOT_MODE: z.enum(["polling", "webhook"]).default("polling"),
   WEBHOOK_URL: z.string().default(""),
   WEBHOOK_SECRET: z.string().default(""),
@@ -94,6 +95,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
     botToken: e.BOT_TOKEN || (devMode ? "000000:dev-token-change-me" : ""),
     botUsername: e.BOT_USERNAME,
     appShortName: e.APP_SHORT_NAME,
+    // The bot is started only when explicitly enabled (default: on in production, off in dev/mock)
+    botEnabled: (e.BOT_ENABLED ?? (isProd ? "true" : "false")) === "true",
     botMode: e.BOT_MODE,
     webhookUrl: e.WEBHOOK_URL,
     webhookSecret: e.WEBHOOK_SECRET,

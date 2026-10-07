@@ -175,6 +175,9 @@ describe("joining chains", () => {
       await ctx.app.inject({ url: `/api/chains/${chain}`, headers: authHeader(a) })
     ).json();
     expect(after.myPosition).toBe(2);
+    expect(after.myPost).toMatchObject({ position: 2, isMine: true, chainId: chain });
+    expect(after.shareLink).toBe(`https://t.me/storychain_bot?startapp=chain_${chain}`);
+    expect(before.myPost).toBeNull();
   });
 
   it("PRO has no daily limit", async () => {

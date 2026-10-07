@@ -1,7 +1,13 @@
 /** DOM mocks of Telegram chrome + DevTools drawer. Loaded only when VITE_DEV_MOCK=true. */
 import { useState, useSyncExternalStore } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { getMockState, MOCK_USER_BASE, mockUi, updateMockState } from "../lib/tgMock";
+import {
+  getMockState,
+  MOCK_USER_BASE,
+  mockUi,
+  updateMockState,
+  type MockUiState,
+} from "../lib/tgMock";
 import { tg } from "../lib/tg";
 import { useSession } from "../lib/queries";
 
@@ -42,8 +48,170 @@ export default function MockUI() {
           </button>
         </div>
       )}
+      {ui.story && <StoryPreview story={ui.story} />}
+      {ui.tgLink && <TgLinkModal url={ui.tgLink} />}
+      {ui.dialog && <DialogModal dialog={ui.dialog} />}
       <DevTools />
     </>
+  );
+}
+
+function Overlay({ children, label }: { children: React.ReactNode; label: string }) {
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label={label}
+    >
+      {children}
+    </div>
+  );
+}
+
+/** Fake "story composer": shows exactly what shareToStory would receive. */
+function StoryPreview({ story }: { story: NonNullable<MockUiState["story"]> }) {
+  const { params, mediaUrl } = story;
+  const link = /startapp=(chain_[A-Za-z0-9_-]+)/.exec(params?.text ?? "")?.[1];
+  const me = getMockState().userN;
+  const download = async () => {
+    // Re-encode as PNG so the user can inspect the exact pixels
+    const bmp = await createImageBitmap(await (await fetch(mediaUrl)).blob());
+    const c = document.createElement("canvas");
+    c.width = bmp.width;
+    c.height = bmp.height;
+    c.getContext("2d")?.drawImage(bmp, 0, 0);
+    c.toBlob((b) => {
+      if (!b) return;
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(b);
+      a.download = "storychain-card.png";
+      a.click();
+    }, "image/png");
+  };
+  return (
+    <Overlay label="Story preview (mock)">
+      <div className="flex max-h-full w-full max-w-md gap-4 overflow-auto rounded-2xl bg-neutral-900 p-4 text-white">
+        <div
+          className="relative w-40 shrink-0 overflow-hidden rounded-xl bg-black"
+          style={{ aspectRatio: "9 / 16" }}
+        >
+          <img
+            src={mediaUrl}
+            alt="story media"
+            data-testid="story-image"
+            className="h-full w-full object-cover"
+          />
+          <div
+            data-testid="story-caption"
+            className="absolute inset-x-0 bottom-0 whitespace-pre-wrap bg-gradient-to-t from-black/80 p-2 text-[9px] leading-tight"
+          >
+            {params?.text}
+          </div>
+          {params?.widget_link && (
+            <div
+              data-testid="story-widget"
+              className="absolute left-2 top-10 rounded-full bg-white px-2 py-1 text-[9px] font-semibold text-black"
+            >
+              🔗 {params.widget_link.name ?? params.widget_link.url}
+            </div>
+          )}
+        </div>
+        <div className="min-w-0 flex-1 space-y-2 text-xs">
+          <div className="text-sm font-semibold">shareToStory (mock)</div>
+          <pre
+            data-testid="story-args"
+            className="max-h-32 overflow-auto whitespace-pre-wrap break-all rounded bg-black/50 p-2 text-[10px]"
+          >
+            {JSON.stringify({ media_url: mediaUrl, params }, null, 1)}
+          </pre>
+          {!params?.widget_link && (
+            <div className="opacity-70">No widget_link: the author is not Telegram Premium.</div>
+          )}
+          <button
+            className="w-full rounded-lg bg-white/15 px-2 py-1.5"
+            onClick={() => void download()}
+          >
+            ⬇ Download PNG
+          </button>
+          {link && (
+            <div>
+              <div className="mb-1 opacity-70">Open the story link as…</div>
+              <div className="flex flex-wrap gap-1">
+                {[1, 2, 3, 4]
+                  .filter((n) => n !== me)
+                  .map((n) => (
+                    <a
+                      key={n}
+                      className="rounded-lg bg-sky-600 px-2 py-1"
+                      href={`/?mock_user=${n}&mock_start_param=${link}`}
+                    >
+                      User {n}
+                    </a>
+                  ))}
+              </div>
+            </div>
+          )}
+          <button
+            className="w-full rounded-lg bg-white px-2 py-1.5 font-semibold text-black"
+            onClick={mockUi.closeStory}
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </Overlay>
+  );
+}
+
+function TgLinkModal({ url }: { url: string }) {
+  return (
+    <Overlay label="openTelegramLink (mock)">
+      <div className="w-full max-w-sm space-y-3 rounded-2xl bg-neutral-900 p-4 text-sm text-white">
+        <div className="font-semibold">openTelegramLink (mock)</div>
+        <a
+          data-testid="tg-link"
+          href={url}
+          target="_blank"
+          rel="noreferrer"
+          className="block break-all text-sky-400 underline"
+        >
+          {url}
+        </a>
+        <button
+          className="w-full rounded-lg bg-white px-2 py-1.5 font-semibold text-black"
+          onClick={mockUi.closeTgLink}
+        >
+          Close
+        </button>
+      </div>
+    </Overlay>
+  );
+}
+
+function DialogModal({ dialog }: { dialog: NonNullable<MockUiState["dialog"]> }) {
+  return (
+    <Overlay label={dialog.kind === "alert" ? "Alert (mock)" : "Confirm (mock)"}>
+      <div className="w-full max-w-sm space-y-3 rounded-2xl bg-neutral-900 p-4 text-sm text-white">
+        <p data-testid="mock-dialog-message">{dialog.message}</p>
+        <div className="flex gap-2">
+          {dialog.kind === "confirm" && (
+            <button
+              className="flex-1 rounded-lg bg-white/15 px-2 py-1.5"
+              onClick={() => mockUi.answerDialog(false)}
+            >
+              Cancel
+            </button>
+          )}
+          <button
+            className="flex-1 rounded-lg bg-white px-2 py-1.5 font-semibold text-black"
+            onClick={() => mockUi.answerDialog(true)}
+          >
+            OK
+          </button>
+        </div>
+      </div>
+    </Overlay>
   );
 }
 

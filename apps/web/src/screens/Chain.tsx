@@ -4,11 +4,13 @@ import { ApiError } from "../lib/api";
 import { useChain, useChainPosts } from "../lib/queries";
 import { Button, EmptyState, ErrorState, Skeleton } from "../components/ui";
 import { useInfiniteSentinel } from "../hooks/useInfiniteSentinel";
+import { useShare } from "../hooks/useShare";
 
 export function ChainScreen() {
   const { id = "" } = useParams();
   const { t, plural, err } = useI18n();
   const navigate = useNavigate();
+  const { shareStory, sendToChat } = useShare();
   const chain = useChain(id);
   const posts = useChainPosts(id, chain.isSuccess);
   const more = useInfiniteSentinel(
@@ -41,7 +43,7 @@ export function ChainScreen() {
     );
   }
 
-  const { chain: c, hasJoined } = chain.data;
+  const { chain: c, hasJoined, myPost, shareLink } = chain.data;
   // The first page comes with the chain detail; further pages via the infinite query
   const items = posts.data ? posts.data.pages.flatMap((p) => p.items) : chain.data.posts.items;
 
@@ -56,9 +58,44 @@ export function ChainScreen() {
         <p className="text-sm text-tg-hint">
           {plural("participants", c.postsCount)} · {t("by", { name: c.creator.firstName })}
         </p>
-        <Button className="mt-2 w-full" onClick={() => navigate(`/chain/${c.id}/join`)}>
-          {hasJoined ? `↗ ${t("joinedShare")}` : `✨ ${t("join")}`}
-        </Button>
+        {hasJoined && myPost ? (
+          <div className="mt-2 space-y-2">
+            <Button
+              className="w-full"
+              onClick={() =>
+                void shareStory({
+                  postId: myPost.id,
+                  mediaUrl: myPost.imageUrl,
+                  link: shareLink,
+                  title: c.title,
+                  emoji: c.emoji,
+                })
+              }
+            >
+              ↗ {t("joinedShare")}
+            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="secondary"
+                className="flex-1"
+                onClick={() => sendToChat({ link: shareLink, title: c.title, emoji: c.emoji })}
+              >
+                ✉️ {t("sendToChat")}
+              </Button>
+              <Button
+                variant="secondary"
+                className="flex-1"
+                onClick={() => navigate(`/chain/${c.id}/join`)}
+              >
+                ✎ {t("updateCard")}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <Button className="mt-2 w-full" onClick={() => navigate(`/chain/${c.id}/join`)}>
+            ✨ {t("join")}
+          </Button>
+        )}
       </header>
 
       {items.length === 0 ? (

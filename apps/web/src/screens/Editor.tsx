@@ -8,6 +8,7 @@ import { qk, useChain, useSession } from "../lib/queries";
 import { tg } from "../lib/tg";
 import { Button, EmptyState, ErrorState, Skeleton } from "../components/ui";
 import { useMainButton } from "../hooks/useTgButtons";
+import { useShare } from "../hooks/useShare";
 import { CardPreview } from "../editor/CardPreview";
 import { TemplatePicker } from "../editor/TemplatePicker";
 import { DEFAULT_VIEW, zoomView, type View } from "../editor/layout";
@@ -31,6 +32,7 @@ export default function Editor() {
   const qc = useQueryClient();
   const chain = useChain(id);
   const session = useSession();
+  const { shareStory, sendToChat } = useShare();
 
   const [step, setStep] = useState<Step>("photo");
   const [photo, setPhoto] = useState<Photo | null>(null);
@@ -101,6 +103,14 @@ export default function Editor() {
       tg.HapticFeedback.notification("success");
       setResult(res);
       setStep("done");
+      // One tap = publish + open Telegram's story composer (falls back to manual sharing if unsupported)
+      void shareStory({
+        postId: res.post.id,
+        mediaUrl: res.publicImageUrl,
+        link: res.shareLink,
+        title: options.chainTitle,
+        emoji: chain.data?.chain.emoji ?? null,
+      });
       void qc.invalidateQueries({ queryKey: qk.chain(id) });
       void qc.invalidateQueries({ queryKey: qk.posts(id) });
       void qc.invalidateQueries({ queryKey: ["chains"] });
@@ -112,7 +122,18 @@ export default function Editor() {
     } finally {
       setPublishing(false);
     }
-  }, [options, publishing, template.id, fontFamily, caption, id, qc, err]);
+  }, [
+    options,
+    publishing,
+    template.id,
+    fontFamily,
+    caption,
+    id,
+    qc,
+    err,
+    shareStory,
+    chain.data?.chain.emoji,
+  ]);
 
   // One MainButton for the whole flow: "Next" on the style step, "Publish" on the preview step
   const onMain = useCallback(() => {
@@ -184,9 +205,36 @@ export default function Editor() {
           height={1920}
           style={{ aspectRatio: "9 / 16" }}
         />
-        <Button className="w-full" onClick={() => navigate(`/chain/${c.id}`, { replace: true })}>
-          {t("openChain")}
-        </Button>
+        <div className="space-y-2">
+          <Button
+            className="w-full"
+            onClick={() =>
+              void shareStory({
+                postId: result.post.id,
+                mediaUrl: result.publicImageUrl,
+                link: result.shareLink,
+                title: c.title,
+                emoji: c.emoji,
+              })
+            }
+          >
+            ↗ {t("shareAgain")}
+          </Button>
+          <Button
+            variant="secondary"
+            className="w-full"
+            onClick={() => sendToChat({ link: result.shareLink, title: c.title, emoji: c.emoji })}
+          >
+            ✉️ {t("sendToChat")}
+          </Button>
+          <Button
+            variant="ghost"
+            className="w-full"
+            onClick={() => navigate(`/chain/${c.id}`, { replace: true })}
+          >
+            {t("openChain")}
+          </Button>
+        </div>
       </main>
     );
   }

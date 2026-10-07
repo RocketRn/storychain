@@ -62,6 +62,10 @@ export interface ChainDetailDTO {
   hasJoined: boolean;
   /** position of the viewer's post in this chain (kept when re-posting), null if not joined */
   myPosition: number | null;
+  /** the viewer's own post (to share again without re-posting), null if not joined */
+  myPost: PostDTO | null;
+  /** deep link `https://t.me/<bot>?startapp=chain_<id>` */
+  shareLink: string;
 }
 
 export interface CreatePostResultDTO {

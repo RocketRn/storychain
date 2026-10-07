@@ -45,6 +45,13 @@ const ru = {
   idea3: "Трек дня",
   comingSoon: "Скоро здесь появится",
   // editor
+  shareJoin: "Присоединяйся",
+  widgetName: "Присоединиться к цепочке",
+  shareAgain: "Поделиться ещё раз",
+  sendToChat: "Отправить в чат",
+  updateCard: "Обновить мою карточку",
+  shareFallback:
+    "Эта версия Telegram не умеет публиковать истории из приложения. Ссылка скопирована, картинка открыта — добавь их в историю вручную.",
   stickerYourTurn: "Твой черед",
   editorTitle: "Новая карточка",
   stepPhoto: "Фото",
@@ -135,6 +142,13 @@ const en: Dict = {
   idea2: "Your desk right now",
   idea3: "Track of the day",
   comingSoon: "Coming soon",
+  shareJoin: "Join",
+  widgetName: "Join the chain",
+  shareAgain: "Share again",
+  sendToChat: "Send to chat",
+  updateCard: "Update my card",
+  shareFallback:
+    "This Telegram version can't publish stories from the app. The link is copied and the image is opened — add them to your story manually.",
   stickerYourTurn: "Your turn",
   editorTitle: "New card",
   stepPhoto: "Photo",

@@ -6,6 +6,7 @@ import helmet from "@fastify/helmet";
 import multipart from "@fastify/multipart";
 import rateLimit from "@fastify/rate-limit";
 import fastifyStatic from "@fastify/static";
+import { webhookCallback, type Bot } from "grammy";
 import { ZodError } from "zod";
 import type { ApiErrorBody } from "@storychain/shared";
 import type { Config } from "./config";
@@ -22,6 +23,8 @@ export interface Deps {
   config: Config;
   db: Db;
   storage: Storage;
+  /** Telegram bot; when present and BOT_MODE=webhook, updates are accepted on /api/telegram/webhook */
+  bot?: Bot;
 }
 
 export async function buildApp(deps: Deps): Promise<FastifyInstance> {
@@ -85,5 +88,13 @@ export async function buildApp(deps: Deps): Promise<FastifyInstance> {
   registerMiscRoutes(app, deps);
   registerChainRoutes(app, deps);
   if (config.devMode && !config.isProd) registerDevRoutes(app, deps);
+  if (deps.bot && config.botMode === "webhook") {
+    // grammY verifies the X-Telegram-Bot-Api-Secret-Token header against `secretToken`
+    app.post(
+      "/api/telegram/webhook",
+      { config: { rateLimit: false } },
+      webhookCallback(deps.bot, "fastify", { secretToken: config.webhookSecret }),
+    );
+  }
   return app;
 }

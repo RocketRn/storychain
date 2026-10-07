@@ -192,6 +192,11 @@ test.describe("editor flow", () => {
     await page.getByRole("button", { name: "Publish to Story" }).click();
     await expect(page.getByTestId("editor-done")).toBeVisible();
     await expect(page.getByText("You are #4")).toBeVisible();
+    // publishing opens the (mock) story composer: close it
+    await page
+      .getByRole("dialog", { name: "Story preview (mock)" })
+      .getByRole("button", { name: "Close" })
+      .click();
 
     // The stored image is 1080x1920 and carries the server-side watermark in the bottom-right
     const src = (await page

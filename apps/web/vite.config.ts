@@ -11,6 +11,10 @@ export default defineConfig(({ mode }) => {
   return {
     envDir: "../..",
     plugins: [react()],
-    server: { port: 5173, proxy: { "/api": apiTarget, "/uploads": apiTarget } },
+    server: {
+      port: 5173,
+      allowedHosts: true /* dev server only: lets a tunnel host name through */,
+      proxy: { "/api": apiTarget, "/uploads": apiTarget },
+    },
   };
 });

@@ -29,6 +29,31 @@ pnpm dev               # open http://localhost:5173
 - Safety: the API refuses `DEV_MODE=true` with `NODE_ENV=production`; `vite build` fails if `VITE_DEV_MOCK=true`;
   the mock code is not part of production bundles.
 
+## Real Telegram (bot + tunnel)
+
+Telegram needs **HTTPS**, and `shareToStory` needs a **publicly reachable HTTPS media URL**, so use a tunnel.
+Vite proxies `/api` and `/uploads` to the API, so **one tunnel to the web dev server is enough**:
+
+1. Talk to [@BotFather](https://t.me/BotFather): `/newbot` -> copy the token and username.
+2. Start a tunnel to the web port, e.g. `cloudflared tunnel --url http://localhost:5173` (or `ngrok http 5173`) and copy the `https://…` URL.
+3. In `.env`:
+   ```
+   BOT_TOKEN=<token>          BOT_USERNAME=<bot username without @>
+   BOT_ENABLED=true           BOT_MODE=polling
+   WEBAPP_URL=<tunnel url>    PUBLIC_BASE_URL=<tunnel url>
+   CORS_ORIGINS=<tunnel url>
+   DEV_MODE=false             VITE_DEV_MOCK=false
+   ```
+4. BotFather: `/newapp` (pick the bot, set the Web App URL to the tunnel URL, remember the short name -> optional
+   `APP_SHORT_NAME`) and/or `/setmenubutton` with the same URL. Links then look like
+   `https://t.me/<bot>?startapp=chain_<id>` (or `https://t.me/<bot>/<short>?startapp=…` when `APP_SHORT_NAME` is set).
+5. `pnpm dev`, open the bot in Telegram, send `/start`, tap the button.
+6. Verify: create a chain, publish a card — Telegram's story editor opens with your image and the caption containing the link;
+   Premium accounts additionally get the "Join the chain" widget. Open the link from a second account: the Mini App opens on that chain.
+
+On Telegram clients older than 7.8 the app falls back to opening the image + copying the link.
+The manual checks per platform are listed in `CHECKLIST.md` (added in Phase 6).
+
 ## Card editor
 
 `/chain/:id/join` opens the editor: pick/take a photo, pan/pinch/scroll to frame it, choose a template and font

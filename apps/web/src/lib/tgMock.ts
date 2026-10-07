@@ -12,10 +12,18 @@ export interface MockState {
   premium: boolean;
   platform: string;
   lang: string;
+  /** emulate Telegram < 7.8: shareToStory unavailable -> exercises the manual fallback */
+  legacy: boolean;
 }
 
 const KEY = "storychain.mock";
-const DEFAULTS: MockState = { userN: 1, premium: false, platform: "tdesktop", lang: "ru" };
+const DEFAULTS: MockState = {
+  userN: 1,
+  premium: false,
+  platform: "tdesktop",
+  lang: "ru",
+  legacy: false,
+};
 
 function loadState(): MockState {
   let saved: Partial<MockState> = {};
@@ -30,6 +38,7 @@ function loadState(): MockState {
   if (q.has("mock_premium")) state.premium = q.get("mock_premium") === "1";
   if (q.has("mock_platform")) state.platform = q.get("mock_platform") ?? state.platform;
   if (q.has("mock_lang")) state.lang = q.get("mock_lang") ?? state.lang;
+  if (q.has("mock_legacy")) state.legacy = q.get("mock_legacy") === "1";
   saveState(state);
   return state;
 }
@@ -48,7 +57,7 @@ export const getMockState = (): MockState => loadState();
 export function updateMockState(patch: Partial<MockState>): void {
   saveState({ ...loadState(), ...patch });
   const url = new URL(window.location.href);
-  for (const k of ["mock_user", "mock_premium", "mock_platform", "mock_lang"])
+  for (const k of ["mock_user", "mock_premium", "mock_platform", "mock_lang", "mock_legacy"])
     url.searchParams.delete(k);
   window.location.replace(url.toString());
 }
@@ -59,12 +68,16 @@ export interface MockUiState {
   main: { visible: boolean; text: string; enabled: boolean; progress: boolean };
   story: { mediaUrl: string; params?: StoryParams } | null;
   invoice: { url: string; cb: (s: InvoiceStatus) => void } | null;
+  tgLink: string | null;
+  dialog: { message: string; kind: "alert" | "confirm"; resolve: (ok: boolean) => void } | null;
 }
 let ui: MockUiState = {
   back: { visible: false },
   main: { visible: false, text: "", enabled: true, progress: false },
   story: null,
   invoice: null,
+  tgLink: null,
+  dialog: null,
 };
 const listeners = new Set<() => void>();
 const backCbs = new Set<() => void>();
@@ -86,6 +99,12 @@ export const mockUi = {
     if (ui.main.enabled && !ui.main.progress) mainCbs.forEach((c) => c());
   },
   closeStory: () => patch({ story: null }),
+  closeTgLink: () => patch({ tgLink: null }),
+  answerDialog(ok: boolean) {
+    const d = ui.dialog;
+    patch({ dialog: null });
+    d?.resolve(ok);
+  },
   resolveInvoice(status: InvoiceStatus) {
     const inv = ui.invoice;
     patch({ invoice: null });
@@ -144,7 +163,7 @@ export async function createMockTg(): Promise<TgFacade> {
   };
   const log = (name: string, ...args: unknown[]) => console.info(`[tgMock] ${name}`, ...args);
 
-  return {
+  const facade: TgFacade = {
     initData,
     startParam,
     user: {
@@ -157,8 +176,8 @@ export async function createMockTg(): Promise<TgFacade> {
     platform: s.platform,
     colorScheme: dark ? "dark" : "light",
     themeParams,
-    version: "9.0",
-    isVersionAtLeast: () => true,
+    version: s.legacy ? "7.0" : "9.0",
+    isVersionAtLeast: (v) => compareVersions(s.legacy ? "7.0" : "9.0", v) >= 0,
     ready: () => log("ready"),
     expand: () => log("expand"),
     shareToStory(mediaUrl, params) {
@@ -169,10 +188,18 @@ export async function createMockTg(): Promise<TgFacade> {
       log("openInvoice", url);
       patch({ invoice: { url, cb } });
     },
-    openTelegramLink: (url) => log("openTelegramLink", url),
+    openTelegramLink(url) {
+      log("openTelegramLink", url);
+      patch({ tgLink: url });
+    },
     openLink: (url) => void window.open(url, "_blank", "noopener"),
-    showAlert: async (m) => void window.alert(m),
-    showConfirm: async (m) => window.confirm(m),
+    // DOM dialogs (not window.alert) so flows stay scriptable and visible in screenshots
+    showAlert: (message) =>
+      new Promise<void>((resolve) =>
+        patch({ dialog: { message, kind: "alert", resolve: () => resolve() } }),
+      ),
+    showConfirm: (message) =>
+      new Promise<boolean>((resolve) => patch({ dialog: { message, kind: "confirm", resolve } })),
     BackButton: {
       show: () => patch({ back: { visible: true } }),
       hide: () => patch({ back: { visible: false } }),
@@ -194,4 +221,31 @@ export async function createMockTg(): Promise<TgFacade> {
       selection: () => log("haptic.selection"),
     },
   };
+  if (!s.legacy) {
+    facade.downloadFile = ({ url, file_name }, cb) => {
+      log("downloadFile", url, file_name);
+      void fetch(url)
+        .then((r) => r.blob())
+        .then((blob) => {
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(blob);
+          a.download = file_name;
+          a.click();
+          cb?.(true);
+        })
+        .catch(() => cb?.(false));
+    };
+  }
+  return facade;
+}
+
+/** "9.0" vs "7.8" style comparison. */
+export function compareVersions(a: string, b: string): number {
+  const pa = a.split(".").map(Number);
+  const pb = b.split(".").map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] ?? 0) - (pb[i] ?? 0);
+    if (d !== 0) return d < 0 ? -1 : 1;
+  }
+  return 0;
 }
