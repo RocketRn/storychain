@@ -33,9 +33,9 @@ export function buildStoryText({ link, title, emoji, lang }: ShareInfo): string 
   return `${prefix}«${truncate(title, room)}»\n${tail}`;
 }
 
-export function buildStoryParams(info: ShareInfo & { isPremium: boolean }): StoryParams {
+export function buildStoryParams(info: ShareInfo & { isTgPremium: boolean }): StoryParams {
   const params: StoryParams = { text: buildStoryText(info) };
-  if (info.isPremium) {
+  if (info.isTgPremium) {
     params.widget_link = {
       url: info.link,
       name: truncate(translate(info.lang, "widgetName"), WIDGET_NAME_MAX),
@@ -73,7 +73,7 @@ export async function shareToStoryFlow(
   deps: ShareDeps,
 ): Promise<ShareOutcome> {
   const { tg } = deps;
-  const params = buildStoryParams({ ...args, isPremium: tg.user?.is_premium === true });
+  const params = buildStoryParams({ ...args, isTgPremium: tg.user?.is_premium === true });
   let shared = false;
   if (tg.isVersionAtLeast(STORY_MIN_VERSION)) {
     try {

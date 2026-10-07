@@ -3,12 +3,13 @@ import { useI18n } from "../lib/i18n";
 import { tg } from "../lib/tg";
 import { useChains, useSession } from "../lib/queries";
 import { ApiError } from "../lib/api";
-import { Button, Chip, EmptyState, ErrorState } from "../components/ui";
+import { Button, EmptyState, ErrorState } from "../components/ui";
+import { BoostedCarousel } from "../components/BoostedCarousel";
 import { ChainCard, ChainCardSkeleton } from "../components/ChainCard";
 import { useInfiniteSentinel } from "../hooks/useInfiniteSentinel";
 
 export function Home() {
-  const { t, err, lang } = useI18n();
+  const { t, err } = useI18n();
   const session = useSession();
   const featured = useChains("featured");
   const trending = useChains("trending");
@@ -18,13 +19,14 @@ export function Home() {
   );
 
   const s = session.data;
-  const date = s?.proUntil ? new Date(s.proUntil).toLocaleDateString(lang) : "";
-  const left = s && s.dailyLimit !== null ? Math.max(0, s.dailyLimit - s.usedToday) : 0;
   const trendingItems = trending.data?.pages.flatMap((p) => p.items) ?? [];
   const featuredItems = featured.data?.pages.flatMap((p) => p.items) ?? [];
 
   return (
     <main className="space-y-6 p-4">
+      {/* paid placements: pinned at the very top, hidden when nothing is boosted */}
+      <BoostedCarousel />
+
       <header className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">
@@ -39,15 +41,6 @@ export function Home() {
         >
           {(s?.user.firstName ?? tg.user?.first_name ?? "?").slice(0, 1).toUpperCase()}
         </Link>
-        {s && (
-          <Link to="/pro" aria-label="PRO">
-            {s.isPro ? (
-              <Chip tone="pro">{t("proChip", { date })}</Chip>
-            ) : (
-              <Chip>{t("freeChip", { left })}</Chip>
-            )}
-          </Link>
-        )}
       </header>
 
       <Link to="/create" className="block">

@@ -2,8 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   CARD_HEIGHT,
   CARD_WIDTH,
-  FREE_FONTS,
-  PREMIUM_FONTS,
+  ALL_FONTS,
   SAFE_BOTTOM,
   SAFE_TOP,
   STICKER_H,
@@ -148,15 +147,15 @@ describe("fitTextLines", () => {
 });
 
 describe("templates data", () => {
-  it("ships >= 4 free and >= 4 premium templates with unique ids", () => {
-    expect(TEMPLATES.filter((t) => !t.isPremium).length).toBeGreaterThanOrEqual(4);
-    expect(TEMPLATES.filter((t) => t.isPremium).length).toBeGreaterThanOrEqual(4);
+  it("ships 8 templates with unique ids and NO premium/locked flag at all", () => {
+    expect(TEMPLATES.length).toBeGreaterThanOrEqual(8);
     expect(new Set(TEMPLATES.map((t) => t.id)).size).toBe(TEMPLATES.length);
+    for (const t of TEMPLATES) expect(Object.keys(t)).not.toContain("isPremium");
   });
-  it("has >= 2 free and >= 4 premium fonts, all with a self-hosted weight", () => {
-    expect(FREE_FONTS.length).toBeGreaterThanOrEqual(2);
-    expect(PREMIUM_FONTS.length).toBeGreaterThanOrEqual(4);
-    for (const t of TEMPLATES) expect(FONT_WEIGHTS[t.fontFamily]).toBeDefined();
+  it("ships 6 fonts, all available to everyone and all with a self-hosted weight", () => {
+    expect(ALL_FONTS.length).toBeGreaterThanOrEqual(6);
+    for (const f of ALL_FONTS) expect(FONT_WEIGHTS[f]).toBeDefined();
+    for (const t of TEMPLATES) expect(ALL_FONTS).toContain(t.fontFamily);
   });
   it("keeps photo frame and sticker inside the Telegram safe zones", () => {
     for (const t of TEMPLATES) {

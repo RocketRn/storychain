@@ -1,16 +1,23 @@
+import { lazy, Suspense, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useI18n } from "../lib/i18n";
 import { ApiError } from "../lib/api";
-import { useChain, useChainPosts } from "../lib/queries";
+import { useChain, useChainPosts, useSession } from "../lib/queries";
 import { Button, EmptyState, ErrorState, Skeleton } from "../components/ui";
 import { useInfiniteSentinel } from "../hooks/useInfiniteSentinel";
 import { useShare } from "../hooks/useShare";
+import { ChannelButton, SponsoredLabel } from "../components/BoostedCarousel";
+
+// The boost flow (and TonConnect inside it) is only downloaded when the creator opens it
+const BoostModal = lazy(() => import("../components/BoostModal"));
 
 export function ChainScreen() {
   const { id = "" } = useParams();
-  const { t, plural, err } = useI18n();
+  const { t, plural, err, lang } = useI18n();
   const navigate = useNavigate();
   const { shareStory, sendToChat } = useShare();
+  const session = useSession();
+  const [boostOpen, setBoostOpen] = useState(false);
   const chain = useChain(id);
   const posts = useChainPosts(id, chain.isSuccess);
   const more = useInfiniteSentinel(
@@ -46,6 +53,11 @@ export function ChainScreen() {
   const { chain: c, hasJoined, myPost, shareLink } = chain.data;
   // The first page comes with the chain detail; further pages via the infinite query
   const items = posts.data ? posts.data.pages.flatMap((p) => p.items) : chain.data.posts.items;
+  // Only the creator of a marathon can boost it
+  const isCreator = !!session.data && session.data.user.id === c.creator.id;
+  const boostedUntil = c.boostedUntil
+    ? new Date(c.boostedUntil).toLocaleString(lang, { dateStyle: "medium", timeStyle: "short" })
+    : "";
 
   return (
     <main className="pb-28">
@@ -53,11 +65,28 @@ export function ChainScreen() {
         <div className="text-4xl" aria-hidden>
           {c.emoji ?? "🔗"}
         </div>
+        {c.isBoosted && <SponsoredLabel />}
         <h1 className="text-2xl font-bold">{c.title}</h1>
         {c.description && <p className="text-tg-hint">{c.description}</p>}
         <p className="text-sm text-tg-hint">
           {plural("participants", c.postsCount)} · {t("by", { name: c.creator.firstName })}
         </p>
+        {c.isBoosted && c.channelUrl && (
+          <ChannelButton url={c.channelUrl} className="w-full py-3" />
+        )}
+        {isCreator && (
+          <Button
+            variant="secondary"
+            className="w-full"
+            onClick={() => setBoostOpen(true)}
+            data-testid="boost-button"
+          >
+            🔥{" "}
+            {c.isBoosted && boostedUntil
+              ? t("boostedUntilExtend", { date: boostedUntil })
+              : t("boostMarathon")}
+          </Button>
+        )}
         {hasJoined && myPost ? (
           <div className="mt-2 space-y-2">
             <Button
@@ -127,6 +156,11 @@ export function ChainScreen() {
             </li>
           ))}
         </ul>
+      )}
+      {boostOpen && (
+        <Suspense fallback={null}>
+          <BoostModal chain={c} onClose={() => setBoostOpen(false)} />
+        </Suspense>
       )}
       <div ref={more} className="h-8" />
       {posts.isFetchingNextPage && (

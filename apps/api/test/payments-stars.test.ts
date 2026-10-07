@@ -16,7 +16,7 @@ import { authHeader, createChain, createCtx, ensureUser, newTgId, type TestCtx }
 const H = 3_600_000;
 const D = 24 * H;
 let ctx: TestCtx;
-let nowMs = Date.now();
+const nowMs = Date.now();
 const clock = () => new Date(nowMs);
 const invoiceCalls: InvoiceLinkArgs[] = [];
 const stubCreate: CreateInvoiceLink = async (a) => {

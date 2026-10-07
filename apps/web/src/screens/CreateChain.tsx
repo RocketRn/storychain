@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { normalizeChainInput } from "@storychain/shared/light";
+import { normalizeChainInput, parseChannelUrl } from "@storychain/shared/light";
 import { useI18n } from "../lib/i18n";
 import { ApiError } from "../lib/api";
 import { tg } from "../lib/tg";
@@ -14,12 +14,17 @@ export function CreateChain() {
   const [title, setTitle] = useState("");
   const [emoji, setEmoji] = useState("");
   const [description, setDescription] = useState("");
+  const [channelUrl, setChannelUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
-    const input = normalizeChainInput({ title, emoji, description });
+    if (!parseChannelUrl(channelUrl).ok) {
+      setError(t("channelInvalid"));
+      return;
+    }
+    const input = normalizeChainInput({ title, emoji, description, channelUrl });
     if (!input) {
       setError(t("titleHint"));
       return;
@@ -86,6 +91,25 @@ export function CreateChain() {
             value={description}
             onChange={(e) => setDescription(e.target.value)}
           />
+        </label>
+        <label className="block space-y-1">
+          <span className="text-sm text-tg-hint">{t("channelLabel")}</span>
+          <input
+            className={input}
+            value={channelUrl}
+            maxLength={100}
+            inputMode="url"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            placeholder={t("channelPlaceholder")}
+            aria-describedby="channel-hint"
+            data-testid="create-channel-input"
+            onChange={(e) => setChannelUrl(e.target.value)}
+          />
+          <span id="channel-hint" className="block text-xs text-tg-hint">
+            {t("channelHint")}
+          </span>
         </label>
         {error && (
           <p role="alert" className="text-tg-destructive">

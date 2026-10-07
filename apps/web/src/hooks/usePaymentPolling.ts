@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import type { PaymentStatusDTO } from "@storychain/shared/light";
 import { api } from "../lib/api";
-import { qk } from "../lib/queries";
+import { useInvalidateChains } from "../lib/queries";
 
 export type PollState = "idle" | "polling" | "paid" | "failed" | "expired" | "timeout";
 
@@ -11,7 +10,7 @@ export type PollState = "idle" | "polling" | "paid" | "failed" | "expired" | "ti
  * `timeout` means "still processing" (not failed): the user can re-check.
  */
 export function usePaymentPolling() {
-  const qc = useQueryClient();
+  const invalidate = useInvalidateChains();
   const [state, setState] = useState<PollState>("idle");
   const [status, setStatus] = useState<PaymentStatusDTO | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -37,8 +36,7 @@ export function usePaymentPolling() {
           setStatus(s);
           if (s.status === "paid") {
             setState("paid");
-            void qc.invalidateQueries({ queryKey: qk.session });
-            void qc.invalidateQueries({ queryKey: qk.plans });
+            void invalidate(); // the chain is now boosted: carousel, lists and detail change
             return;
           }
           if (s.status === "failed" || s.status === "refunded") return setState("failed");
@@ -51,7 +49,7 @@ export function usePaymentPolling() {
       };
       void tick();
     },
-    [qc, stop],
+    [invalidate, stop],
   );
 
   return { state, status, start, reset: () => (stop(), setState("idle")) };

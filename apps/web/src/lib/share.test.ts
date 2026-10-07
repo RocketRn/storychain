@@ -34,15 +34,15 @@ describe("buildStoryText", () => {
 
 describe("buildStoryParams", () => {
   it("adds widget_link only for Premium authors", () => {
-    expect(buildStoryParams({ ...base, isPremium: false }).widget_link).toBeUndefined();
-    const p = buildStoryParams({ ...base, isPremium: true });
+    expect(buildStoryParams({ ...base, isTgPremium: false }).widget_link).toBeUndefined();
+    const p = buildStoryParams({ ...base, isTgPremium: true });
     expect(p.widget_link?.url).toBe(link);
     expect(p.text).toContain(link); // link stays in the text for Premium too
   });
   it("keeps widget name within 48 chars in both languages", () => {
     for (const lang of ["ru", "en"] as const) {
       expect(
-        buildStoryParams({ ...base, lang, isPremium: true }).widget_link?.name?.length,
+        buildStoryParams({ ...base, lang, isTgPremium: true }).widget_link?.name?.length,
       ).toBeLessThanOrEqual(WIDGET_NAME_MAX);
     }
   });

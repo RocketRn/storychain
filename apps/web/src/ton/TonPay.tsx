@@ -10,8 +10,7 @@ import type { TonIntentDTO } from "@storychain/shared/light";
 import { api, ApiError } from "../lib/api";
 import { useI18n } from "../lib/i18n";
 import { Button } from "../components/ui";
-import type { PayPanelProps } from "../screens/Paywall";
-import { TON_POLL_MS } from "../screens/Paywall";
+import { TON_POLL_MS, type PayPanelProps } from "../lib/boostPay";
 import { buildTransferRequest } from "./jettonTransfer";
 
 const bot = import.meta.env.VITE_BOT_USERNAME ?? "";
@@ -35,7 +34,7 @@ export default function TonPay(props: PayPanelProps) {
   );
 }
 
-function TonPayInner({ plan, onStarted, onError, disabled }: PayPanelProps) {
+function TonPayInner({ plan, chainId, prepare, onStarted, onError, disabled }: PayPanelProps) {
   const { t, err } = useI18n();
   const wallet = useTonWallet();
   const [tonConnectUI] = useTonConnectUI();
@@ -43,10 +42,14 @@ function TonPayInner({ plan, onStarted, onError, disabled }: PayPanelProps) {
 
   const pay = async () => {
     if (!wallet) return;
+    if (!(await prepare())) return;
     setBusy(true);
     try {
       // 1. our server creates the order (reference + amounts + merchant)
-      const intent = await api.post<TonIntentDTO>("/api/payments/ton/intent", { planId: plan.id });
+      const intent = await api.post<TonIntentDTO>("/api/payments/ton/intent", {
+        chainId,
+        planId: plan.id,
+      });
       // 2. the sender's Jetton wallet is resolved server-side (no third-party API keys in the browser)
       const { jettonWallet } = await api.get<{ jettonWallet: string }>(
         `/api/ton/jetton-wallet?owner=${encodeURIComponent(wallet.account.address)}`,
@@ -96,7 +99,7 @@ function TonPayInner({ plan, onStarted, onError, disabled }: PayPanelProps) {
         onClick={() => void pay()}
         data-testid="pay-grm"
       >
-        {t("payGrm", { amount: plan.grm.human })}
+        {t("payGrm", { amount: plan.prices.grm.display })}
       </Button>
     </div>
   );

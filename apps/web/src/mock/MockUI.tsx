@@ -1,6 +1,7 @@
 /** DOM mocks of Telegram chrome + DevTools drawer. Loaded only when VITE_DEV_MOCK=true. */
 import { useState, useSyncExternalStore } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useLocation } from "react-router-dom";
 import {
   getMockState,
   MOCK_USER_BASE,
@@ -280,7 +281,9 @@ function DevTools() {
       setBusy(false);
     }
   };
-  const pro = session.data?.isPro ?? false;
+  // "this chain" = the chain page currently open
+  const { pathname } = useLocation();
+  const chainId = /^\/chain\/([A-Za-z0-9_-]+)/.exec(pathname)?.[1];
   const btn = "rounded-lg bg-white/15 px-2 py-1 text-xs hover:bg-white/25 disabled:opacity-50";
 
   return (
@@ -301,9 +304,7 @@ function DevTools() {
         >
           <div>
             <div className="mb-1 opacity-70">
-              User: {session.data?.user.firstName ?? tg.user?.first_name} (tg id {tgId}) ·{" "}
-              {pro ? "PRO" : "Free"}
-              {session.data ? ` · used ${session.data.usedToday}` : ""}
+              User: {session.data?.user.firstName ?? tg.user?.first_name} (tg id {tgId})
             </div>
             <div className="flex gap-1">
               {[1, 2, 3, 4].map((n) => (
@@ -328,32 +329,31 @@ function DevTools() {
               </button>
             </div>
           </div>
-          <div className="flex flex-wrap gap-1">
-            <button
-              className={btn}
-              disabled={busy}
-              onClick={() =>
-                void act(() => dev("grant-pro", { telegramId: tgId, days: pro ? 0 : 30 }))
-              }
-            >
-              PRO: {pro ? "turn off" : "turn on"}
-            </button>
-            <button
-              className={btn}
-              disabled={busy}
-              onClick={() =>
-                void act(() => dev("grant-pro", { telegramId: tgId, expireInMinutes: 1 }))
-              }
-            >
-              PRO expires in 1 min
-            </button>
-            <button
-              className={btn}
-              disabled={busy}
-              onClick={() => void act(() => dev("reset-usage", { telegramId: tgId }))}
-            >
-              Reset usage
-            </button>
+          <div>
+            <div className="mb-1 opacity-70">Chain: {chainId ?? "(open a chain page)"}</div>
+            <div className="flex flex-wrap gap-1">
+              <button
+                className={btn}
+                disabled={busy || !chainId}
+                onClick={() => void act(() => dev("boost-chain", { chainId, hours: 24 }))}
+              >
+                Boost this chain 24h
+              </button>
+              <button
+                className={btn}
+                disabled={busy || !chainId}
+                onClick={() => void act(() => dev("boost-chain", { chainId, hours: 168 }))}
+              >
+                Boost this chain 7d
+              </button>
+              <button
+                className={btn}
+                disabled={busy || !chainId}
+                onClick={() => void act(() => dev("expire-boost", { chainId }))}
+              >
+                Expire boost
+              </button>
+            </div>
           </div>
           <div className="flex flex-wrap items-center gap-1">
             <button className={btn} onClick={() => updateMockState({ premium: !s.premium })}>

@@ -4,7 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { getTemplate, TEMPLATES, type CreatePostResultDTO } from "@storychain/shared/light";
 import { api, ApiError } from "../lib/api";
 import { useI18n } from "../lib/i18n";
-import { qk, useChain, useSession } from "../lib/queries";
+import { qk, useChain } from "../lib/queries";
 import { tg } from "../lib/tg";
 import { Button, EmptyState, ErrorState, Skeleton } from "../components/ui";
 import { useMainButton } from "../hooks/useTgButtons";
@@ -31,7 +31,6 @@ export default function Editor() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const chain = useChain(id);
-  const session = useSession();
   const { shareStory, sendToChat } = useShare();
 
   const [step, setStep] = useState<Step>("photo");
@@ -52,7 +51,6 @@ export default function Editor() {
   }, [photo]);
   useEffect(() => () => photoRef.current?.bitmap.close(), []);
 
-  const isPro = session.data?.isPro ?? false;
   const template = getTemplate(templateId) ?? (TEMPLATES[0] as (typeof TEMPLATES)[number]);
   const position = chain.data ? (chain.data.myPosition ?? chain.data.chain.postsCount + 1) : 1;
 
@@ -96,7 +94,6 @@ export default function Editor() {
       const blob = await renderCard(options);
       const fd = new FormData();
       fd.append("templateId", template.id);
-      if (fontFamily) fd.append("fontFamily", fontFamily);
       if (caption.trim()) fd.append("caption", caption.trim());
       fd.append("image", blob, "card.jpg");
       const res = await api.post<CreatePostResultDTO>(`/api/chains/${id}/posts`, fd);
@@ -123,18 +120,7 @@ export default function Editor() {
     } finally {
       setPublishing(false);
     }
-  }, [
-    options,
-    publishing,
-    template.id,
-    fontFamily,
-    caption,
-    id,
-    qc,
-    err,
-    shareStory,
-    chain.data?.chain.emoji,
-  ]);
+  }, [options, publishing, template.id, caption, id, qc, err, shareStory, chain.data?.chain.emoji]);
 
   // One MainButton for the whole flow: "Next" on the style step, "Publish" on the preview step
   const onMain = useCallback(() => {
@@ -148,7 +134,7 @@ export default function Editor() {
     loading: step === "preview" && publishing,
   });
 
-  if (chain.isPending || session.isPending) {
+  if (chain.isPending) {
     return (
       <div className="space-y-3 p-4" aria-busy="true">
         <Skeleton className="h-8 w-1/2" />
@@ -169,24 +155,6 @@ export default function Editor() {
       />
     ) : (
       <ErrorState message={err("INTERNAL")} onRetry={() => void chain.refetch()} />
-    );
-  }
-
-  const s = session.data;
-  const limitReached =
-    !!s && s.dailyLimit !== null && s.usedToday >= s.dailyLimit && step !== "done";
-  if (limitReached && s?.dailyLimit != null) {
-    return (
-      <EmptyState
-        emoji="⏳"
-        title={t("dailyLimitTitle")}
-        text={t("dailyLimitText", { n: s.dailyLimit })}
-        action={
-          <Link to="/pro">
-            <Button>⭐ {t("getPro")}</Button>
-          </Link>
-        }
-      />
     );
   }
 
@@ -299,13 +267,7 @@ export default function Editor() {
 
       {options && step === "style" && photo && (
         <section className="space-y-4">
-          <CardPreview
-            options={options}
-            onViewChange={setView}
-            compact
-            showWatermark={!isPro}
-            label={t("dragHint")}
-          />
+          <CardPreview options={options} onViewChange={setView} compact label={t("dragHint")} />
           <p className="text-center text-xs text-tg-hint">{t("dragHint")}</p>
           <label className="flex items-center gap-3 text-sm">
             <span className="text-tg-hint">{t("zoom")}</span>
@@ -335,7 +297,6 @@ export default function Editor() {
             photo={photo}
             title={c.title}
             position={position}
-            isPro={isPro}
             templateId={templateId}
             fontFamily={fontFamily}
             onTemplate={(tid) => {
@@ -343,7 +304,6 @@ export default function Editor() {
               setFontFamily(null);
             }}
             onFont={setFontFamily}
-            onLocked={() => navigate("/pro")}
           />
           <Button variant="ghost" onClick={() => setStep("photo")}>
             ↺ {t("changePhoto")}
@@ -353,8 +313,8 @@ export default function Editor() {
 
       {options && step === "preview" && (
         <section className="space-y-4">
-          <CardPreview options={options} showWatermark={!isPro} label={c.title} />
-          {!isPro && <p className="text-center text-xs text-tg-hint">{t("freeWatermark")}</p>}
+          <CardPreview options={options} label={c.title} />
+          <p className="text-center text-xs text-tg-hint">{t("badgeNote")}</p>
           <label className="block space-y-1">
             <span className="text-sm text-tg-hint">{t("captionLabel")}</span>
             <input
@@ -366,14 +326,9 @@ export default function Editor() {
             />
           </label>
           {error && (
-            <div role="alert" className="space-y-2 text-center text-tg-destructive">
-              <p>{error.message}</p>
-              {(error.code === "PRO_REQUIRED" || error.code === "DAILY_LIMIT_REACHED") && (
-                <Link to="/pro">
-                  <Button variant="secondary">⭐ {t("getPro")}</Button>
-                </Link>
-              )}
-            </div>
+            <p role="alert" className="text-center text-tg-destructive">
+              {error.message}
+            </p>
           )}
           <Button variant="ghost" onClick={() => setStep("style")} disabled={publishing}>
             ← {t("back2")}

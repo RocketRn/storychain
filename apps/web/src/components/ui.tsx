@@ -27,9 +27,9 @@ export function Chip({
   tone = "neutral",
 }: {
   children: ReactNode;
-  tone?: "neutral" | "pro";
+  tone?: "neutral" | "sponsored";
 }) {
-  const tones = { neutral: "bg-tg-secondary text-tg-hint", pro: "bg-amber-400 text-black" };
+  const tones = { neutral: "bg-tg-secondary text-tg-hint", sponsored: "bg-amber-300 text-black" };
   return (
     <span
       className={`inline-flex items-center whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold ${tones[tone]}`}

@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import type { ChainDTO } from "@storychain/shared/light";
 import { useI18n } from "../lib/i18n";
+import { SponsoredLabel } from "./BoostedCarousel";
 
 export function ChainCard({ chain, compact = false }: { chain: ChainDTO; compact?: boolean }) {
   const { plural } = useI18n();
@@ -15,6 +16,7 @@ export function ChainCard({ chain, compact = false }: { chain: ChainDTO; compact
         {chain.emoji ?? "🔗"}
       </span>
       <span className="min-w-0">
+        {chain.isBoosted && <SponsoredLabel />}
         <span className="line-clamp-2 block font-semibold">{chain.title}</span>
         <span className="block text-sm text-tg-hint">
           {plural("participants", chain.postsCount)}

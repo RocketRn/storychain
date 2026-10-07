@@ -8,8 +8,11 @@ const PREVIEW_SCALE = 0.5;
 interface Props {
   options: CardOptions;
   onViewChange?: (v: View) => void;
-  /** Free users: DOM-only watermark overlay (never exported; the server adds the real one) */
-  showWatermark?: boolean;
+  /**
+   * DOM-only preview of the "StoryChain" attribution badge (never exported: the server composites the real
+   * one onto every card). On by default so what-you-see matches the result.
+   */
+  showBadge?: boolean;
   label: string;
   /** keep the preview within ~55% of the viewport height so pickers stay visible below it */
   compact?: boolean;
@@ -19,7 +22,7 @@ interface Props {
 export function CardPreview({
   options,
   onViewChange,
-  showWatermark = false,
+  showBadge = true,
   label,
   compact = false,
 }: Props) {
@@ -128,10 +131,10 @@ export function CardPreview({
           pinch.current = null;
         }}
       />
-      {showWatermark && (
+      {showBadge && (
         <div
           aria-hidden
-          data-testid="watermark-overlay"
+          data-testid="badge-overlay"
           className="pointer-events-none absolute rounded-full bg-black/45 font-bold text-white"
           style={{
             right: "3.7%",

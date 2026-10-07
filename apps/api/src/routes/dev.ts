@@ -18,7 +18,7 @@ export function registerDevRoutes(app: FastifyInstance, deps: Deps): void {
     const body = z
       .object({
         userId: z.number().int().positive(),
-        isPremium: z.boolean().default(false),
+        isTgPremium: z.boolean().default(false),
         languageCode: z.string().default("ru"),
         startParam: z.string().max(64).optional(),
       })
@@ -29,7 +29,7 @@ export function registerDevRoutes(app: FastifyInstance, deps: Deps): void {
         first_name: DEMO_NAMES[body.userId - 1_000_001] ?? `User ${body.userId}`,
         username: `demo_user_${body.userId}`,
         language_code: body.languageCode,
-        is_premium: body.isPremium,
+        is_premium: body.isTgPremium,
       },
       config.botToken,
       body.startParam ? { startParam: body.startParam } : {},

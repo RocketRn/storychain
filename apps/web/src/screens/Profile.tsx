@@ -1,21 +1,29 @@
+import { lazy, Suspense, useState } from "react";
 import { Link } from "react-router-dom";
+import type { ChainDTO } from "@storychain/shared/light";
 import { useI18n } from "../lib/i18n";
 import { ApiError } from "../lib/api";
-import { useMyPosts, useSession } from "../lib/queries";
+import { useMyChains, useMyPosts, useSession } from "../lib/queries";
 import { Button, Chip, EmptyState, ErrorState, Skeleton } from "../components/ui";
 import { useInfiniteSentinel } from "../hooks/useInfiniteSentinel";
 
-/** Minimal profile: who I am, PRO / usage, and the posts I published. */
+// The boost flow (and TonConnect inside it) is only downloaded when the creator opens it
+const BoostModal = lazy(() => import("../components/BoostModal"));
+
+/** Minimal profile: who I am, the marathons I created (with boost status) and the posts I published. */
 export function Profile() {
-  const { t, err, lang } = useI18n();
+  const { t, err, lang, plural } = useI18n();
   const session = useSession();
   const posts = useMyPosts();
+  const chains = useMyChains();
+  const [boosting, setBoosting] = useState<ChainDTO | null>(null);
   const more = useInfiniteSentinel(
     () => void posts.fetchNextPage(),
     !!posts.hasNextPage && !posts.isFetchingNextPage,
   );
   const s = session.data;
   const items = posts.data?.pages.flatMap((p) => p.items) ?? [];
+  const myChains = chains.data?.pages.flatMap((p) => p.items) ?? [];
 
   return (
     <main className="space-y-5 p-4">
@@ -32,27 +40,67 @@ export function Profile() {
         </div>
       </header>
 
-      {s && (
-        <section className="space-y-2 rounded-2xl bg-tg-secondary p-4">
-          {s.isPro ? (
-            <p className="flex flex-wrap items-center gap-2">
-              <Chip tone="pro">PRO</Chip>
-              <span>
-                {t("proActiveUntil", { date: new Date(s.proUntil ?? 0).toLocaleDateString(lang) })}
-              </span>
-            </p>
-          ) : (
-            s.dailyLimit !== null && (
-              <p>{t("usedToday", { used: s.usedToday, limit: s.dailyLimit })}</p>
-            )
-          )}
-          <Link to="/pro" className="block">
-            <Button variant={s.isPro ? "secondary" : "primary"} className="w-full">
-              ⭐ {s.isPro ? t("extendHint").replace(/\.$/, "") : t("getPro")}
-            </Button>
-          </Link>
-        </section>
-      )}
+      <section aria-labelledby="my-marathons-h">
+        <h2 id="my-marathons-h" className="mb-3 text-lg font-semibold">
+          {t("myMarathons")}
+        </h2>
+        {chains.isPending ? (
+          <Skeleton className="h-20" />
+        ) : chains.isError ? (
+          <ErrorState
+            message={err(chains.error instanceof ApiError ? chains.error.code : "INTERNAL")}
+            onRetry={() => void chains.refetch()}
+          />
+        ) : myChains.length === 0 ? (
+          <EmptyState
+            emoji="🏁"
+            title={t("noMarathons")}
+            action={
+              <Link to="/create">
+                <Button>{t("createChain")}</Button>
+              </Link>
+            }
+          />
+        ) : (
+          <ul className="space-y-3" aria-label={t("myMarathons")}>
+            {myChains.map((c) => (
+              <li
+                key={c.id}
+                data-testid="my-marathon"
+                className="flex items-center gap-3 rounded-2xl bg-tg-secondary p-3"
+              >
+                <Link to={`/chain/${c.id}`} className="flex min-w-0 flex-1 items-center gap-3">
+                  <span className="text-2xl" aria-hidden>
+                    {c.emoji ?? "🔗"}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block truncate font-semibold">{c.title}</span>
+                    <span className="flex flex-wrap items-center gap-2 text-sm text-tg-hint">
+                      {plural("participants", c.postsCount)}
+                      {c.isBoosted && <Chip tone="sponsored">🔥 {t("boostChip")}</Chip>}
+                    </span>
+                    {c.isBoosted && c.boostedUntil && (
+                      <span className="block text-xs text-tg-hint">
+                        {new Date(c.boostedUntil).toLocaleString(lang, {
+                          dateStyle: "medium",
+                          timeStyle: "short",
+                        })}
+                      </span>
+                    )}
+                  </span>
+                </Link>
+                <Button
+                  variant="secondary"
+                  className="shrink-0 px-3 py-2 text-sm"
+                  onClick={() => setBoosting(c)}
+                >
+                  🔥 {t("boostAction")}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       <section aria-labelledby="my-posts-h">
         <h2 id="my-posts-h" className="mb-3 text-lg font-semibold">
@@ -106,6 +154,12 @@ export function Profile() {
         )}
         <div ref={more} className="h-8" />
       </section>
+
+      {boosting && (
+        <Suspense fallback={null}>
+          <BoostModal chain={boosting} onClose={() => setBoosting(null)} />
+        </Suspense>
+      )}
     </main>
   );
 }

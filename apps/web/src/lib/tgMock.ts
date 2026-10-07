@@ -119,7 +119,7 @@ async function fetchInitData(s: MockState, startParam: string | null): Promise<s
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       userId: MOCK_USER_BASE + s.userN,
-      isPremium: s.premium,
+      isTgPremium: s.premium,
       languageCode: s.lang,
       ...(startParam ? { startParam } : {}),
     }),

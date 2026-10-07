@@ -4,17 +4,26 @@ import type { TonIntentDTO } from "@storychain/shared/light";
 import { fromUnits } from "@storychain/shared/light";
 import { api, ApiError } from "../lib/api";
 import { Button } from "../components/ui";
-import type { PayPanelProps } from "../screens/Paywall";
-import { TON_POLL_MS } from "../screens/Paywall";
+import { TON_POLL_MS, type PayPanelProps } from "../lib/boostPay";
 
 const base = import.meta.env.VITE_API_URL ?? "";
 
-export default function MockGrmPanel({ plan, onStarted, onError, disabled }: PayPanelProps) {
+export default function MockGrmPanel({
+  plan,
+  chainId,
+  prepare,
+  onStarted,
+  onError,
+  disabled,
+}: PayPanelProps) {
   const [intent, setIntent] = useState<TonIntentDTO | null>(null);
 
   const create = async () => {
+    if (!(await prepare())) return;
     try {
-      setIntent(await api.post<TonIntentDTO>("/api/payments/ton/intent", { planId: plan.id }));
+      setIntent(
+        await api.post<TonIntentDTO>("/api/payments/ton/intent", { chainId, planId: plan.id }),
+      );
     } catch (e) {
       onError(e instanceof ApiError ? e.message : "intent failed");
     }
@@ -44,7 +53,7 @@ export default function MockGrmPanel({ plan, onStarted, onError, disabled }: Pay
           onClick={() => void create()}
           data-testid="grm-create"
         >
-          Pay {plan.grm.human} GRM
+          Pay {plan.prices.grm.display}
         </Button>
       ) : (
         <>

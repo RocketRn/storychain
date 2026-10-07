@@ -7,7 +7,6 @@ import { tg } from "./lib/tg";
 import { Home } from "./screens/Home";
 import { ChainScreen } from "./screens/Chain";
 import { CreateChain } from "./screens/CreateChain";
-import { Paywall } from "./screens/Paywall";
 import { Profile } from "./screens/Profile";
 
 // The editor (canvas, fonts, templates) is code-split: it is only needed when joining a chain
@@ -69,7 +68,6 @@ function Shell() {
               </Suspense>
             }
           />
-          <Route path="/pro" element={<Paywall />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
