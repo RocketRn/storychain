@@ -3,7 +3,13 @@ import { Link } from "react-router-dom";
 import type { ChainDTO } from "@storychain/shared/light";
 import { useI18n } from "../lib/i18n";
 import { ApiError } from "../lib/api";
-import { useMyChains, useMyPosts, useSession } from "../lib/queries";
+import {
+  flattenPages,
+  useMyChains,
+  useMyPosts,
+  usePrefetchPlans,
+  useSession,
+} from "../lib/queries";
 import { Button, Chip, EmptyState, ErrorState, Skeleton } from "../components/ui";
 import { useInfiniteSentinel } from "../hooks/useInfiniteSentinel";
 
@@ -22,8 +28,9 @@ export function Profile() {
     !!posts.hasNextPage && !posts.isFetchingNextPage,
   );
   const s = session.data;
-  const items = posts.data?.pages.flatMap((p) => p.items) ?? [];
-  const myChains = chains.data?.pages.flatMap((p) => p.items) ?? [];
+  const items = flattenPages(posts.data?.pages);
+  const myChains = flattenPages(chains.data?.pages);
+  usePrefetchPlans(myChains.length > 0); // each of them has a Boost button
 
   return (
     <main className="space-y-5 p-4">

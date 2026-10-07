@@ -193,6 +193,7 @@ export async function createMockTg(): Promise<TgFacade> {
       patch({ tgLink: url });
     },
     openLink: (url) => void window.open(url, "_blank", "noopener"),
+    close: () => window.location.reload(), // the mock has no host app to close: restart it with fresh credentials
     // DOM dialogs (not window.alert) so flows stay scriptable and visible in screenshots
     showAlert: (message) =>
       new Promise<void>((resolve) =>

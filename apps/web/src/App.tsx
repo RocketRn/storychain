@@ -1,8 +1,8 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, type ComponentType } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { parseStartParam } from "@storychain/shared/light";
-import { detectLang, I18nContext, makeI18n } from "./lib/i18n";
+import { detectLang, I18nContext, makeI18n, useI18n } from "./lib/i18n";
 import { tg } from "./lib/tg";
 import { Home } from "./screens/Home";
 import { ChainScreen } from "./screens/Chain";
@@ -11,17 +11,16 @@ import { Profile } from "./screens/Profile";
 
 // The editor (canvas, fonts, templates) is code-split: it is only needed when joining a chain
 const Editor = lazy(() => import("./screens/Editor"));
-import { EmptyState, Skeleton } from "./components/ui";
+import { Button, EmptyState, Skeleton } from "./components/ui";
 import { useBackButton } from "./hooks/useTgButtons";
-import { useSession } from "./lib/queries";
+import { useSessionExpired } from "./lib/auth";
+import { createQueryClient, useSession } from "./lib/queries";
 
 // Tree-shaken from production builds: the condition is a build-time constant.
 const MockUI: ComponentType | null =
   import.meta.env.VITE_DEV_MOCK === "true" ? lazy(() => import("./mock/MockUI")) : null;
 
-const queryClient = new QueryClient({
-  defaultOptions: { queries: { staleTime: 15_000, refetchOnWindowFocus: false } },
-});
+const queryClient = createQueryClient();
 
 /** Routes `start_param=chain_<id>` to /chain/:id exactly once per app launch. */
 function StartParamRedirect() {
@@ -37,9 +36,25 @@ function StartParamRedirect() {
   return null;
 }
 
+/** The server no longer accepts our Telegram credentials; only reopening the app issues new ones. */
+function SessionExpired() {
+  const { t, err } = useI18n();
+  return (
+    <EmptyState
+      emoji="🔒"
+      title={t("errorTitle")}
+      text={err("UNAUTHORIZED")}
+      action={<Button onClick={() => tg.close()}>{t("close")}</Button>}
+    />
+  );
+}
+
 function Shell() {
   useBackButton();
-  const session = useSession();
+  // Started here so it runs in PARALLEL with the screen's own requests. The screens only read it for the
+  // user's name and the creator check, and every API call authenticates by itself, so nothing waits for it.
+  useSession();
+  const expired = useSessionExpired();
   const { pathname } = useLocation();
   // The mock BackButton is a DOM overlay; leave room for it (real Telegram renders it natively)
   const mockBackSpacer = MockUI !== null && pathname !== "/";
@@ -49,12 +64,8 @@ function Shell() {
     >
       {mockBackSpacer && <div className="h-10" aria-hidden />}
       <StartParamRedirect />
-      {session.isPending && !session.data ? (
-        <div className="space-y-3 p-4" aria-busy="true">
-          <Skeleton className="h-8 w-2/3" />
-          <Skeleton className="h-12" />
-          <Skeleton className="h-28" />
-        </div>
+      {expired ? (
+        <SessionExpired />
       ) : (
         <Routes>
           <Route path="/" element={<Home />} />

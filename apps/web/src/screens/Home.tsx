@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { useI18n } from "../lib/i18n";
 import { tg } from "../lib/tg";
-import { useChains, useSession } from "../lib/queries";
+import { flattenPages, useChains, useSession } from "../lib/queries";
 import { ApiError } from "../lib/api";
 import { Button, EmptyState, ErrorState } from "../components/ui";
 import { BoostedCarousel } from "../components/BoostedCarousel";
@@ -19,8 +19,8 @@ export function Home() {
   );
 
   const s = session.data;
-  const trendingItems = trending.data?.pages.flatMap((p) => p.items) ?? [];
-  const featuredItems = featured.data?.pages.flatMap((p) => p.items) ?? [];
+  const trendingItems = flattenPages(trending.data?.pages);
+  const featuredItems = flattenPages(featured.data?.pages);
 
   return (
     <main className="space-y-6 p-4">

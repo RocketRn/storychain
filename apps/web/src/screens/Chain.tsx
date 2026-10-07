@@ -2,7 +2,13 @@ import { lazy, Suspense, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useI18n } from "../lib/i18n";
 import { ApiError } from "../lib/api";
-import { useChain, useChainPosts, useSession } from "../lib/queries";
+import {
+  flattenPages,
+  useChain,
+  useChainPosts,
+  usePrefetchPlans,
+  useSession,
+} from "../lib/queries";
 import { Button, EmptyState, ErrorState, Skeleton } from "../components/ui";
 import { useInfiniteSentinel } from "../hooks/useInfiniteSentinel";
 import { useShare } from "../hooks/useShare";
@@ -24,6 +30,10 @@ export function ChainScreen() {
     () => void posts.fetchNextPage(),
     !!posts.hasNextPage && !posts.isFetchingNextPage,
   );
+  const isCreator =
+    !!session.data && !!chain.data && session.data.user.id === chain.data.chain.creator.id;
+  // the creator can open the boost sheet: have its prices ready before the tap
+  usePrefetchPlans(isCreator);
 
   if (chain.isPending) return <ChainSkeleton />;
   if (chain.isError) {
@@ -52,9 +62,8 @@ export function ChainScreen() {
 
   const { chain: c, hasJoined, myPost, shareLink } = chain.data;
   // The first page comes with the chain detail; further pages via the infinite query
-  const items = posts.data ? posts.data.pages.flatMap((p) => p.items) : chain.data.posts.items;
+  const items = posts.data ? flattenPages(posts.data.pages) : chain.data.posts.items;
   // Only the creator of a marathon can boost it
-  const isCreator = !!session.data && session.data.user.id === c.creator.id;
   const boostedUntil = c.boostedUntil
     ? new Date(c.boostedUntil).toLocaleString(lang, { dateStyle: "medium", timeStyle: "short" })
     : "";

@@ -50,6 +50,8 @@ export interface TgFacade {
   isVersionAtLeast(version: string): boolean;
   ready(): void;
   expand(): void;
+  /** closes the Mini App (the user can reopen it to get fresh credentials) */
+  close(): void;
   shareToStory(mediaUrl: string, params?: StoryParams): void;
   openInvoice(url: string, cb: (status: InvoiceStatus) => void): void;
   openTelegramLink(url: string): void;
@@ -89,6 +91,7 @@ interface WebApp {
   isVersionAtLeast(v: string): boolean;
   ready(): void;
   expand(): void;
+  close(): void;
   shareToStory(url: string, params?: StoryParams): void;
   openInvoice(url: string, cb: (s: InvoiceStatus) => void): void;
   openTelegramLink(url: string): void;
@@ -145,6 +148,7 @@ function createRealTg(): TgFacade {
     isVersionAtLeast: (v) => wa.isVersionAtLeast(v),
     ready: () => wa.ready(),
     expand: () => wa.expand(),
+    close: () => wa.close(),
     shareToStory: (u, p) => wa.shareToStory(u, p),
     openInvoice: (u, cb) => wa.openInvoice(u, cb),
     openTelegramLink: (u) => wa.openTelegramLink(u),

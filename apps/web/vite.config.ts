@@ -23,6 +23,23 @@ export default defineConfig(({ mode }) => {
           ]
         : []),
     ],
+    build: {
+      rollupOptions: {
+        output: {
+          // The framework changes a few times a year, the app on every deploy. Keeping them in separate files lets a
+          // returning user (Telegram's WebView keeps its cache between launches) re-download only the app code.
+          manualChunks(id) {
+            if (
+              /node_modules\/(react|react-dom|scheduler|react-router|react-router-dom|@tanstack)\//.test(
+                id,
+              )
+            )
+              return "vendor";
+            return undefined;
+          },
+        },
+      },
+    },
     server: {
       port: 5173,
       allowedHosts: true /* dev server only: lets a tunnel host name through */,

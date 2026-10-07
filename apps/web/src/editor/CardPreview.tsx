@@ -40,12 +40,14 @@ export function CardPreview({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
+  // Only when the card itself changed. Without a dependency list this ran after EVERY render of the parent, so
+  // each keystroke in the caption field repainted the whole 540x960 canvas.
   useEffect(() => {
     const ctx = canvasRef.current?.getContext("2d");
     if (!ctx || loadedKey !== key) return;
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
     drawCard(ctx, options, PREVIEW_SCALE);
-  });
+  }, [options, loadedKey, key]);
 
   // Gesture state lives in refs so handlers always see the latest view
   const latest = useRef({ options, onViewChange });

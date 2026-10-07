@@ -1,5 +1,11 @@
-import { useCallback } from "react";
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect } from "react";
+import {
+  QueryClient,
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import type {
   ChainDetailDTO,
   ChainDTO,
@@ -10,7 +16,41 @@ import type {
   PostDTO,
   SessionDTO,
 } from "@storychain/shared/light";
-import { api } from "./api";
+import { api, ApiError } from "./api";
+
+/**
+ * Retry only what a retry can fix: network failures and 5xx. A 4xx is the server's decision (401 expired,
+ * 403, 404, 429 slow down...): repeating it only adds load and delays the error the user needs to see.
+ */
+export function shouldRetry(failureCount: number, error: unknown): boolean {
+  if (error instanceof ApiError && error.status >= 400 && error.status < 500) return false;
+  return failureCount < 2;
+}
+
+export const createQueryClient = (): QueryClient =>
+  new QueryClient({
+    defaultOptions: {
+      queries: { staleTime: 15_000, refetchOnWindowFocus: false, retry: shouldRetry },
+    },
+  });
+
+/**
+ * Flattens infinite-query pages. De-duplicates by id (first occurrence wins): rankings move while a user
+ * scrolls, and a repeated id would render twice and break React's keys.
+ */
+export function flattenPages<T extends { id: string }>(
+  pages: ReadonlyArray<{ items: T[] }> | undefined,
+): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const page of pages ?? [])
+    for (const item of page.items) {
+      if (seen.has(item.id)) continue;
+      seen.add(item.id);
+      out.push(item);
+    }
+  return out;
+}
 
 export const qk = {
   session: ["session"] as const,
@@ -27,12 +67,25 @@ export const useSession = () =>
   useQuery({
     queryKey: qk.session,
     queryFn: () => api.post<SessionDTO>("/api/auth/session"),
-    staleTime: 30_000,
-    retry: 1,
+    // POST /auth/session writes (lastSeenAt): refresh it rarely, not on every screen that reads the name
+    staleTime: 10 * 60_000,
   });
 
+const PLANS_STALE_MS = 10 * 60_000;
+const fetchPlans = () => api.get<PlansDTO>("/api/plans");
+
+/** Prices and methods change with a deploy, not while the app is open. */
 export const usePlans = () =>
-  useQuery({ queryKey: qk.plans, queryFn: () => api.get<PlansDTO>("/api/plans") });
+  useQuery({ queryKey: qk.plans, queryFn: fetchPlans, staleTime: PLANS_STALE_MS });
+
+/** Warms the plans for a user who can open the boost sheet, so it appears with content instead of a skeleton. */
+export function usePrefetchPlans(enabled: boolean): void {
+  const qc = useQueryClient();
+  useEffect(() => {
+    if (enabled)
+      void qc.prefetchQuery({ queryKey: qk.plans, queryFn: fetchPlans, staleTime: PLANS_STALE_MS });
+  }, [enabled, qc]);
+}
 
 export const useChains = (sort: "trending" | "new" | "featured") =>
   useInfiniteQuery({
@@ -47,7 +100,6 @@ export const useChain = (id: string) =>
   useQuery({
     queryKey: qk.chain(id),
     queryFn: () => api.get<ChainDetailDTO>(`/api/chains/${id}`),
-    retry: (count, err) => (err as { status?: number }).status !== 404 && count < 2,
   });
 
 export const useChainPosts = (id: string, enabled: boolean) =>
