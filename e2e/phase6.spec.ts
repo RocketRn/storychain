@@ -15,65 +15,46 @@ async function publishOn(page: Page, chainId: string, template = "minimal-light"
   await expect(page.getByTestId("editor-done")).toBeVisible();
 }
 
-/** Mean red channel of the stored image at the watermark pill vs. the same row elsewhere (flat cream template). */
-async function watermarkContrast(page: Page, src: string): Promise<number> {
-  return page.evaluate(async (u) => {
-    const bmp = await createImageBitmap(await (await fetch(u)).blob());
-    const c = document.createElement("canvas");
-    c.width = bmp.width;
-    c.height = bmp.height;
-    const ctx = c.getContext("2d") as CanvasRenderingContext2D;
-    ctx.drawImage(bmp, 0, 0);
-    const red = (x: number, y: number) => ctx.getImageData(x, y, 1, 1).data[0] as number;
-    return red(300, 1663) - red(815, 1663);
-  }, src);
-}
-
-test("full journey: free limit -> paywall -> GRM -> unlimited, no watermark -> profile", async ({
+test("full journey: a free user publishes without limits, creates a marathon, boosts it, sees it in the carousel and on the profile", async ({
   page,
 }) => {
-  // brand-new user #30
   await page.goto("/?mock_user=30&mock_lang=en");
-  await expect(page.getByText("Free · 3 left")).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Hi,/ })).toBeVisible();
+  await expect(page.locator("body")).not.toContainText(/Free ·|PRO/);
 
-  // 1st publication is watermarked (server side)
-  await publishOn(page, "cat00001");
-  await story(page).getByRole("button", { name: "Close" }).click();
-  const first = (await page
-    .getByTestId("editor-done")
-    .locator("img")
-    .getAttribute("src")) as string;
-  expect(await watermarkContrast(page, first)).toBeGreaterThan(60);
-
-  // publications 2 and 3
-  for (const chain of ["desk0002", "trk00003"]) {
+  // 4 publications in a row (the old limit was 3): no limit screen, no paywall
+  for (const chain of ["cat00001", "desk0002", "trk00003", "hot00002"]) {
     await publishOn(page, chain);
     await story(page).getByRole("button", { name: "Close" }).click();
   }
-
-  // 4th: the editor shows the limit screen with a PRO call to action
-  await page.goto("/chain/cat00001/join");
-  await expect(page.getByText("Daily limit reached")).toBeVisible();
-  await page.getByRole("link", { name: /Get PRO/ }).click();
-  await expect(page.getByRole("heading", { name: "StoryChain PRO" })).toBeVisible();
-
-  // pay with GRM (mock): intent -> simulate -> server-side polling -> PRO
-  await page.getByTestId("grm-create").click();
-  await page.getByTestId("grm-simulate").click();
-  await expect(page.getByTestId("pay-success")).toBeVisible();
-
-  // PRO: the same editor now works, with no watermark and no limit
-  await publishOn(page, "cat00001");
+  await publishOn(page, "hot00001");
   await story(page).getByRole("button", { name: "Close" }).click();
-  const pro = (await page.getByTestId("editor-done").locator("img").getAttribute("src")) as string;
-  expect(Math.abs(await watermarkContrast(page, pro))).toBeLessThan(20);
 
-  // profile shows PRO and my posts (re-posting to cat00001 replaced the first card: 3 distinct chains)
-  await page.getByRole("button", { name: "Open chain" }).click();
+  // create a marathon and boost it with Stars
+  await page.goto("/create?mock_user=30&mock_lang=en");
+  await page.getByLabel("Topic").fill("Journey marathon");
+  await page.getByTestId("create-channel-input").fill("@journeychan");
+  await page.getByRole("button", { name: "Create" }).click();
+  await page.getByTestId("boost-button").click();
+  await page.getByTestId("pay-stars").click();
+  await page
+    .getByRole("dialog", { name: "Stars payment (mock)" })
+    .getByRole("button", { name: "Pay" })
+    .click();
+  await expect(page.getByTestId("boost-success")).toBeVisible();
+  await page.getByTestId("boost-success").getByRole("button", { name: "Done" }).click();
+
+  await page.goto("/");
+  await expect(
+    page.getByTestId("boosted-card").filter({ hasText: "Journey marathon" }),
+  ).toBeVisible();
+
+  // profile: my marathons (boosted) and my posts (5 chains)
   await page.goto("/profile");
   await expect(page.getByRole("heading", { level: 1 })).toContainText("User");
-  await expect(page.getByText("PRO", { exact: true })).toBeVisible();
-  await expect(page.getByRole("list", { name: "My posts" }).getByRole("link")).toHaveCount(3);
+  const row = page.getByTestId("my-marathon").filter({ hasText: "Journey marathon" });
+  await expect(row).toContainText("Boosted");
+  await expect(page.getByRole("list", { name: "My posts" }).getByRole("link")).toHaveCount(5);
   await page.getByRole("list", { name: "My posts" }).getByRole("link").first().click();
   await expect(page).toHaveURL(/\/chain\//);
 });
@@ -81,7 +62,7 @@ test("full journey: free limit -> paywall -> GRM -> unlimited, no watermark -> p
 test("profile: empty state for a user without posts", async ({ page }) => {
   await page.goto("/profile?mock_user=31&mock_lang=en");
   await expect(page.getByText("You haven't joined any chain yet")).toBeVisible();
-  await expect(page.getByText(/Published today: 0 of 3/)).toBeVisible();
+  await expect(page.getByText("You haven't created any marathon yet")).toBeVisible();
 });
 
 test.describe("mobile layout (390x844, touch)", () => {
@@ -109,9 +90,16 @@ test.describe("mobile layout (390x844, touch)", () => {
 
     await page.goto("/create");
     await noHorizontalScroll(page, "create");
-    await page.goto("/pro");
+    await page.goto("/chain/hot00001?mock_user=1&mock_lang=en"); // Anna created the demo chains
+    await page.getByTestId("boost-button").click();
     await expect(page.getByTestId("pay-stars")).toBeVisible();
-    await noHorizontalScroll(page, "paywall");
+    await noHorizontalScroll(page, "boost modal");
+    const sheet = (await page.getByTestId("boost-modal").boundingBox()) as {
+      width: number;
+      height: number;
+    };
+    expect(sheet.height).toBeLessThanOrEqual(844 * 0.92 + 1); // the sheet always fits the viewport
+    await page.screenshot({ path: "test-results/mobile-boost.png" });
     await page.goto("/profile");
     await noHorizontalScroll(page, "profile");
 
@@ -166,7 +154,7 @@ test.describe("accessibility (axe, WCAG 2 A/AA)", () => {
       await page.emulateMedia({ colorScheme: scheme });
       await page.goto("/?mock_user=34&mock_lang=en");
       await expect(page.getByRole("heading", { name: /Hi,/ })).toBeVisible();
-      await expect(page.getByText("Show your cat").first()).toBeVisible();
+      await expect(page.getByTestId("boosted-carousel")).toBeVisible();
       await hideMock(page);
       await audit(page, `home ${scheme}`);
 
@@ -181,10 +169,13 @@ test.describe("accessibility (axe, WCAG 2 A/AA)", () => {
       await hideMock(page);
       await audit(page, `create ${scheme}`);
 
-      await page.goto("/pro");
+      await page.goto("/chain/hot00001?mock_user=1&mock_lang=en"); // Anna created the demo chains
+      await page.getByTestId("boost-button").click();
       await expect(page.getByTestId("pay-stars")).toBeVisible();
       await hideMock(page);
-      await audit(page, `paywall ${scheme}`);
+      await audit(page, `boost modal ${scheme}`);
+      await page.keyboard.press("Escape");
+      await expect(page.getByTestId("boost-modal")).toHaveCount(0);
 
       await page.goto("/profile");
       await hideMock(page);

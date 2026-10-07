@@ -159,6 +159,10 @@ try {
     (await fetch(`${BASE}/api/dev/init-data`, { method: "POST" })).status === 404,
   );
 
+  // the Hot carousel endpoint (public clients need auth like every other endpoint)
+  const boostedNoAuth = await fetch(`${BASE}/api/chains/boosted`);
+  check("GET /api/chains/boosted requires auth", boostedNoAuth.status === 401);
+
   // full flow through the real HTTP stack: auth -> create chain -> upload -> fetch the image from the same origin
   const auth = {
     Authorization: `tma ${initData({ id: 777001, first_name: "Smoke", language_code: "en" })}`,
@@ -171,10 +175,21 @@ try {
     await fetch(`${BASE}/api/chains`, {
       method: "POST",
       headers: { ...auth, "content-type": "application/json" },
-      body: JSON.stringify({ title: "Smoke chain" }),
+      body: JSON.stringify({ title: "Smoke chain", channelUrl: "@smokechannel" }),
     })
   ).json();
   check("create chain", /^[A-Za-z0-9_-]{8}$/.test(chain.id ?? ""));
+  const boostedRes = await fetch(`${BASE}/api/chains/boosted`, { headers: auth });
+  const boosted = await boostedRes.json();
+  check(
+    "GET /api/chains/boosted returns a JSON list (a fresh chain is not in it)",
+    boostedRes.status === 200 && Array.isArray(boosted) && !boosted.some((c) => c.id === chain.id),
+  );
+  const plans = await (await fetch(`${BASE}/api/plans`, { headers: auth })).json();
+  check(
+    "GET /api/plans returns the boost plans (no PRO plan)",
+    plans.boostPlans?.map((p) => p.id).join() === "boost_24h,boost_7d" && plans.plans === undefined,
+  );
   const jpeg = await sharp({
     create: { width: 1080, height: 1920, channels: 3, background: "#3366cc" },
   })

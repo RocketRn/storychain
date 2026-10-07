@@ -142,7 +142,7 @@ test.describe("renderCard", () => {
 });
 
 test.describe("editor flow", () => {
-  test("free user: photo -> style -> publish; premium template is locked; server watermarks", async ({
+  test("photo -> style -> publish; every template is open; the server adds the badge", async ({
     page,
   }) => {
     await page.goto("/chain/cat00001?mock_user=4&mock_lang=en");
@@ -156,15 +156,15 @@ test.describe("editor flow", () => {
       buffer: await splitPhoto(1200, 1600),
     });
     await expect(page.getByTestId("card-preview")).toBeVisible();
-    await expect(page.getByTestId("watermark-overlay")).toBeVisible(); // free users see the live overlay
+    await expect(page.getByTestId("badge-overlay")).toBeVisible(); // the live badge preview is shown to everyone
 
-    // template picker: choose a free one, premium one is badged and opens the paywall
+    // template picker: nothing is locked or badged
     await page.getByTestId("template-minimal-light").click();
     await expect(page.getByTestId("template-minimal-light")).toHaveAttribute(
       "aria-pressed",
       "true",
     );
-    await expect(page.getByTestId("template-neon")).toContainText("PRO");
+    await expect(page.getByTestId("template-neon")).not.toContainText(/PRO|🔒/);
     await page.screenshot({ path: "test-results/editor-style.png" });
 
     // pan + zoom change the preview (drag on canvas, wheel)
@@ -198,7 +198,7 @@ test.describe("editor flow", () => {
       .getByRole("button", { name: "Close" })
       .click();
 
-    // The stored image is 1080x1920 and carries the server-side watermark in the bottom-right
+    // The stored image is 1080x1920 and carries the server-side badge in the bottom-right
     const src = (await page
       .getByTestId("editor-done")
       .locator("img")
@@ -221,28 +221,27 @@ test.describe("editor flow", () => {
     await expect(page.getByText("4 participants").first()).toBeVisible();
   });
 
-  test("premium template is locked for free users, unlocked after PRO", async ({ page }) => {
+  test("every template and every font is selectable at once, with no lock, modal or redirect", async ({
+    page,
+  }) => {
     await page.goto("/chain/desk0002/join?mock_user=3&mock_lang=en");
     await page.getByTestId("photo-input").setInputFiles({
       name: "p.jpg",
       mimeType: "image/jpeg",
       buffer: await splitPhoto(1200, 1600),
     });
+    for (const id of ["neon", "film-strip", "aurora", "retro-pop", "polaroid", "ocean"]) {
+      await page.getByTestId(`template-${id}`).click();
+      await expect(page.getByTestId(`template-${id}`)).toHaveAttribute("aria-pressed", "true");
+    }
+    for (const f of ["Unbounded", "Oswald", "Playfair Display", "Pacifico", "Manrope", "Inter"]) {
+      await page.getByTestId(`font-${f}`).click();
+      await expect(page.getByTestId(`font-${f}`)).toHaveAttribute("aria-pressed", "true");
+    }
+    await expect(page).toHaveURL(/\/join(\?|$)/); // never bounced anywhere
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(page.locator("body")).not.toContainText(/PRO|🔒|paywall|upgrade/i);
     await page.getByTestId("template-neon").click();
-    await expect(page).toHaveURL(/\/pro$/); // locked -> paywall
-
-    // Turn PRO on via DevTools and retry
-    await page.goBack();
-    await page.getByTestId("photo-input").setInputFiles({
-      name: "p.jpg",
-      mimeType: "image/jpeg",
-      buffer: await splitPhoto(1200, 1600),
-    });
-    await page.getByRole("button", { name: "DevTools (mock)" }).click();
-    await page.getByRole("button", { name: /PRO: turn on/ }).click();
-    await expect(page.getByTestId("watermark-overlay")).toHaveCount(0);
-    await page.getByTestId("template-neon").click();
-    await expect(page.getByTestId("template-neon")).toHaveAttribute("aria-pressed", "true");
     await page.getByTestId("font-Pacifico").click();
     await page.getByRole("button", { name: "Next", exact: true }).click();
     await page.getByRole("button", { name: "Publish to Story" }).click();
@@ -256,26 +255,4 @@ test.describe("editor flow", () => {
       .setInputFiles({ name: "x.txt", mimeType: "text/plain", buffer: Buffer.from("nope") });
     await expect(page.getByRole("alert")).toHaveText("Could not open this image");
   });
-});
-
-test("free daily limit: after 3 publications the editor shows the limit screen", async ({
-  page,
-}) => {
-  const photo = await splitPhoto(1200, 1600);
-  for (const chain of ["cat00001", "desk0002", "trk00003"]) {
-    await page.goto(`/chain/${chain}/join?mock_user=5&mock_lang=en`);
-    await page
-      .getByTestId("photo-input")
-      .setInputFiles({ name: "p.jpg", mimeType: "image/jpeg", buffer: photo });
-    await page.getByRole("button", { name: "Next", exact: true }).click();
-    await page.getByRole("button", { name: "Publish to Story" }).click();
-    await expect(page.getByTestId("editor-done")).toBeVisible();
-  }
-  await page.goto("/chain/cat00001/join?mock_user=5&mock_lang=en");
-  await expect(page.getByText("Daily limit reached")).toBeVisible();
-  await expect(page.getByRole("link", { name: /Get PRO/ })).toBeVisible();
-  // DevTools: reset usage unblocks the editor
-  await page.getByRole("button", { name: "DevTools (mock)" }).click();
-  await page.getByRole("button", { name: "Reset usage" }).click();
-  await expect(page.getByTestId("photo-input")).toBeAttached();
 });

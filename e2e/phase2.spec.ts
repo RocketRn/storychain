@@ -44,6 +44,9 @@ test("defaults to Russian and shows Home screenshot", async ({ page }) => {
   await page.goto("/?mock_user=1&mock_lang=ru");
   await expect(page.getByRole("heading", { name: "Привет, Anna!" })).toBeVisible();
   await expect(page.getByText("3 участника").first()).toBeVisible();
-  await expect(page.getByText("Free · осталось 3")).toBeVisible(); // seeding must not use up demo quota
+  // no quota / plan chips exist any more; the sponsored carousel is pinned at the very top
+  await expect(page.locator("body")).not.toContainText(/Free ·|осталось|PRO/);
+  await expect(page.getByTestId("boosted-carousel")).toBeVisible();
+  await expect(page.getByTestId("boosted-card").first()).toContainText("Реклама");
   await page.screenshot({ path: "test-results/phase2-home.png" });
 });
