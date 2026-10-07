@@ -51,6 +51,17 @@ const leaks = readdirSync(dist)
   );
 check("production bundle contains no mock/dev code", leaks.length === 0, leaks.join(", "));
 
+// -1b. Vite reads NODE_ENV from the root .env, and the default .env says "development": a build made beside it
+// ships React's DEVELOPMENT build (about twice the size, several times slower). Only that build prints this hint.
+const devReact = readdirSync(dist)
+  .filter((f) => f.endsWith(".js"))
+  .filter((f) => readFileSync(`${dist}/${f}`, "utf8").includes("Download the React DevTools"));
+check(
+  "web bundle is a production build (no development React inside)",
+  devReact.length === 0,
+  `found in ${devReact.join(", ")}: build with NODE_ENV=production`,
+);
+
 // 0. the production safety guard
 const guard = spawnSync("pnpm", ["--filter", "@storychain/api", "start"], {
   env: { ...env, NODE_ENV: "production", DEV_MODE: "true" },

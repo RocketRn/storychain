@@ -5,12 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "cross-env VITE_DEV_MOCK=false tsc --noEmit && cross-env VITE_DEV_MOCK=false vite build",
+    "build": "cross-env VITE_DEV_MOCK=false tsc --noEmit && cross-env NODE_ENV=production VITE_DEV_MOCK=false vite build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
     "predev": "node scripts/gen-manifest.mjs",
     "prebuild": "node scripts/gen-manifest.mjs",
-    "analyze": "cross-env VITE_DEV_MOCK=false ANALYZE=1 vite build"
+    "analyze": "cross-env NODE_ENV=production VITE_DEV_MOCK=false ANALYZE=1 vite build"
   },
   "dependencies": {
     "@storychain/shared": "workspace:*",

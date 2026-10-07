@@ -29,5 +29,11 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+      # a development build of React in the bundle is ~2x larger and several times slower (see scripts/smoke-single-origin.mjs)
+      - run: |
+          if grep -rq "Download the React DevTools" apps/web/dist/assets; then
+            echo "the web bundle contains React's development build" >&2
+            exit 1
+          fi
       # production dependencies only: dev-tool advisories without an upstream fix are listed in AUDIT.md
       - run: pnpm audit --prod --audit-level=critical

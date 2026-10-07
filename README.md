@@ -247,7 +247,9 @@ queries, UX responsiveness), what was found, what was changed and what is left f
 - "Trending" is "most participants". Lists use keyset cursors (stable while rows are added or re-ranked); an item that
   overtakes the scroll position is skipped rather than shown twice.
 - The TonConnect chunk (≈ 215 kB gzip) is large but only loads after the user picks GRM. The framework (React, router,
-  query ≈ 131 kB gzip) is a separate long-lived `vendor` chunk; the app entry itself is ≈ 17 kB gzip.
+  query ≈ 72 kB gzip) is a separate long-lived `vendor` chunk and the app entry is ≈ 15 kB gzip (≈ 87 kB for a first
+  visit; a deploy only invalidates the entry). `pnpm build` forces `NODE_ENV=production`: Vite otherwise obeys the
+  `NODE_ENV=development` of the default `.env` and ships React's slower, ~2x larger development build.
 - Remaining `pnpm audit` findings are dev tooling without an upstream fix (Prisma CLI's `deepmerge-ts`, Tailwind 3's `braces`
   and `postcss-selector-parser`); nothing from them ships. See [`AUDIT.md`](./AUDIT.md).
 

@@ -100,7 +100,7 @@ Legend: ☐ to do. Run each item on **Android**, **iOS** and **Desktop** unless 
 ## 5. Operations
 
 - ☐ Webhook mode: `BOT_MODE=webhook`, `WEBHOOK_URL=https://<host>/api/telegram/webhook`, `WEBHOOK_SECRET` set → `/start` works; a request without the secret header gets 401.
-- ☐ `pnpm build && pnpm smoke` passes on the deployment host (single-origin mode).
+- ☐ `pnpm build && pnpm smoke` passes on the deployment host (single-origin mode); smoke also fails if the web bundle is a development build.
 - ☐ Production start refuses `DEV_MODE=true`, missing `TON_MERCHANT_ADDRESS`/`BOT_TOKEN`/…, and a non-https `PUBLIC_BASE_URL`.
 - ☐ Uploads use S3 (or a persistent volume) and survive a restart; images are reachable by https from Telegram's servers.
 - ☐ Moderation: set `Chain.isHidden` / `Post.isHidden` in the DB → disappears everywhere (reports are stored in `Report`; there is no admin UI yet).
