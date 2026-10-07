@@ -169,9 +169,9 @@ export async function buildApp(deps: Deps): Promise<FastifyInstance> {
       decorateReply: false, // the uploads registration above owns sendFile
       index: ["index.html"],
       cacheControl: false,
-      setHeaders(res, path) {
+      setHeaders(reply, path) {
         // hashed build assets never change; everything else (index.html, manifest, icons) must revalidate
-        res.setHeader(
+        reply.header(
           "cache-control",
           /[\\/]assets[\\/]/.test(path)
             ? "public, max-age=31536000, immutable"
@@ -181,7 +181,7 @@ export async function buildApp(deps: Deps): Promise<FastifyInstance> {
         );
         // wallets fetch the TonConnect manifest cross-origin
         if (path.endsWith("tonconnect-manifest.json"))
-          res.setHeader("access-control-allow-origin", "*");
+          reply.header("access-control-allow-origin", "*");
       },
     });
   }

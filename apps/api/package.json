@@ -21,7 +21,7 @@
     "@fastify/helmet": "^13.0.0",
     "@fastify/multipart": "^9.4.0",
     "@fastify/rate-limit": "^10.3.0",
-    "@fastify/static": "^8.3.0",
+    "@fastify/static": "^10.1.5",
     "@prisma/client": "^6.19.3",
     "@storychain/shared": "workspace:*",
     "@ton/core": "^0.63.1",
