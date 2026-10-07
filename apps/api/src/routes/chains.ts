@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { customAlphabet } from "nanoid";
+import { z } from "zod";
 import type { Chain, User } from "@prisma/client";
 import {
   CHAIN_ID_ALPHABET,
@@ -9,6 +10,7 @@ import {
   createPostFieldsSchema,
   listChainsQuerySchema,
   listPostsQuerySchema,
+  patchChainSchema,
   MAX_UPLOAD_BYTES,
   buildShareLink,
   type ChainDetailDTO,
@@ -21,21 +23,11 @@ import type { Deps } from "../app";
 import { requireAuth, user } from "../auth/plugin";
 import { errors } from "../errors";
 import { isTextAllowed } from "../moderation";
-import { publishPost, toPostDTO, toPublicUser } from "../services/posts";
+import { publishPost, toPostDTO } from "../services/posts";
+import { toChainDTO } from "../services/chains";
 
 const newChainId = customAlphabet(CHAIN_ID_ALPHABET, CHAIN_ID_LENGTH);
 const PAGE = 20;
-
-const toChainDTO = (c: Chain & { creator: User }): ChainDTO => ({
-  id: c.id,
-  title: c.title,
-  description: c.description,
-  emoji: c.emoji,
-  isFeatured: c.isFeatured,
-  postsCount: c.postsCount,
-  createdAt: c.createdAt.toISOString(),
-  creator: toPublicUser(c.creator),
-});
 
 export function shareLinkFor(deps: Deps, chainId: string): string {
   return buildShareLink({
@@ -46,7 +38,8 @@ export function shareLinkFor(deps: Deps, chainId: string): string {
 }
 
 export function registerChainRoutes(app: FastifyInstance, deps: Deps): void {
-  const { db, storage } = deps;
+  const { db, storage, config } = deps;
+  const now = (): Date => deps.now?.() ?? new Date();
 
   async function visibleChain(id: string): Promise<Chain & { creator: User }> {
     const parsed = chainIdSchema.safeParse(id);
@@ -87,7 +80,45 @@ export function registerChainRoutes(app: FastifyInstance, deps: Deps): void {
     return { id: c.id, title: c.title, emoji: c.emoji, postsCount: c.postsCount };
   });
 
+  // Home carousel: ACTIVE boosts only (boostedUntil > now), newest boost end first. Registered as a static
+  // route so it never collides with /api/chains/:id.
+  app.get("/api/chains/boosted", { preHandler: requireAuth }, async (req): Promise<ChainDTO[]> => {
+    const me = user(req);
+    const { limit } = z
+      .object({ limit: z.coerce.number().int().min(1).max(10).default(10) })
+      .parse(req.query);
+    const t = now();
+    const rows = await db.chain.findMany({
+      where: { isHidden: false, boostedUntil: { gt: t } },
+      orderBy: [{ boostedUntil: "desc" }, { id: "desc" }],
+      take: limit,
+      include: { creator: true },
+    });
+    return rows.map((c) => toChainDTO(c, { now: t, viewerId: me.id }));
+  });
+
+  // Chains I created ("My marathons" on the profile): the creator sees channelUrl / boost end
+  app.get("/api/me/chains", { preHandler: requireAuth }, async (req): Promise<Page<ChainDTO>> => {
+    const me = user(req);
+    const q = listPostsQuerySchema.parse(req.query);
+    const offset = q.cursor ? Number(q.cursor) : 0;
+    if (!Number.isInteger(offset) || offset < 0) throw errors.badRequest("Bad cursor");
+    const rows = await db.chain.findMany({
+      where: { creatorId: me.id, isHidden: false },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      skip: offset,
+      take: PAGE + 1,
+      include: { creator: true },
+    });
+    const t = now();
+    return {
+      items: rows.slice(0, PAGE).map((c) => toChainDTO(c, { now: t, viewerId: me.id })),
+      nextCursor: rows.length > PAGE ? String(offset + PAGE) : null,
+    };
+  });
+
   app.get("/api/chains", { preHandler: requireAuth }, async (req): Promise<Page<ChainDTO>> => {
+    const me = user(req);
     const q = listChainsQuerySchema.parse(req.query);
     const offset = q.cursor ? Number(q.cursor) : 0;
     if (!Number.isInteger(offset) || offset < 0) throw errors.badRequest("Bad cursor");
@@ -109,7 +140,7 @@ export function registerChainRoutes(app: FastifyInstance, deps: Deps): void {
       include: { creator: true },
     });
     return {
-      items: rows.slice(0, PAGE).map(toChainDTO),
+      items: rows.slice(0, PAGE).map((c) => toChainDTO(c, { now: now(), viewerId: me.id })),
       nextCursor: rows.length > PAGE ? String(offset + PAGE) : null,
     };
   });
@@ -130,12 +161,37 @@ export function registerChainRoutes(app: FastifyInstance, deps: Deps): void {
           title: body.title,
           description: body.description ?? null,
           emoji: body.emoji ?? null,
+          channelUrl: body.channelUrl ?? null, // already normalized by the schema; stored but private until boosted
           creatorId: me.id,
         },
         include: { creator: true },
       });
       reply.code(201);
-      return toChainDTO(chain);
+      return toChainDTO(chain, { now: now(), viewerId: me.id });
+    },
+  );
+
+  // Creator-only edit. The title is intentionally not editable (it is printed on cards already shared).
+  app.patch<{ Params: { id: string } }>(
+    "/api/chains/:id",
+    { preHandler: requireAuth },
+    async (req): Promise<ChainDTO> => {
+      const me = user(req);
+      const chain = await visibleChain(req.params.id);
+      if (chain.creatorId !== me.id)
+        throw errors.forbidden("Only the creator can edit this marathon");
+      const body = patchChainSchema.parse(req.body);
+      if (!isTextAllowed(body.description)) throw errors.blocked();
+      const updated = await db.chain.update({
+        where: { id: chain.id },
+        data: {
+          ...(body.channelUrl !== undefined ? { channelUrl: body.channelUrl } : {}),
+          ...(body.emoji !== undefined ? { emoji: body.emoji || null } : {}),
+          ...(body.description !== undefined ? { description: body.description || null } : {}),
+        },
+        include: { creator: true },
+      });
+      return toChainDTO(updated, { now: now(), viewerId: me.id });
     },
   );
 
@@ -150,7 +206,7 @@ export function registerChainRoutes(app: FastifyInstance, deps: Deps): void {
         include: { user: true },
       });
       return {
-        chain: toChainDTO(chain),
+        chain: toChainDTO(chain, { now: now(), viewerId: me.id }),
         posts: await postsPage(chain.id, undefined, me.id),
         hasJoined: !!mine,
         myPosition: mine?.position ?? null,

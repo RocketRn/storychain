@@ -36,6 +36,8 @@ export interface Deps {
   createInvoiceLink?: CreateInvoiceLink;
   /** destination for the structured log (tests); default stdout */
   logStream?: { write(msg: string): void };
+  /** injectable clock (tests time-travel boosts); default: real time */
+  now?: () => Date;
 }
 
 export async function buildApp(deps: Deps): Promise<FastifyInstance> {
