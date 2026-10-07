@@ -15,6 +15,7 @@ import { AppError, errors } from "./errors";
 import { authContext } from "./auth/plugin";
 import type { Storage } from "./storage";
 import { LocalDiskStorage } from "./storage/local";
+import { assertManifestMatches } from "./manifestCheck";
 import { registerChainRoutes } from "./routes/chains";
 import { registerMiscRoutes } from "./routes/misc";
 import { registerDevRoutes } from "./routes/dev";
@@ -48,6 +49,9 @@ export async function buildApp(deps: Deps): Promise<FastifyInstance> {
       `SERVE_WEB is on but ${webIndex} does not exist. Run "pnpm build" first (or set SERVE_WEB=false).`,
     );
   }
+  // Real wallets are involved (mock mode has none): the manifest we serve must belong to this deployment
+  if (config.serveWeb && !config.devMode && config.ton.merchantAddress)
+    assertManifestMatches(config.webDistDir, config.webappUrl);
   const app = Fastify({
     logger: {
       level: config.nodeEnv === "test" && !deps.logStream ? "silent" : "info",

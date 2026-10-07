@@ -46,6 +46,8 @@ export function randomQueryId(): bigint {
 }
 
 export interface TonConnectTransaction {
+  /** TonConnect CHAIN id: a wallet connected to another network refuses the request */
+  network?: string;
   validUntil: number;
   messages: Array<{ address: string; amount: string; payload: string }>;
 }
@@ -64,6 +66,8 @@ export function buildTransferRequest(args: {
   /** the sender's Jetton wallet for the GRM master (from /api/ton/jetton-wallet) */
   jettonWallet: string;
   testOnly?: boolean;
+  /** demanded network (TonConnect CHAIN id, "-239" mainnet / "-3" testnet) */
+  network?: string;
   /** unix seconds, default now */
   now?: number;
   /** default 10 minutes */
@@ -79,6 +83,7 @@ export function buildTransferRequest(args: {
     comment: args.intent.reference,
   });
   return {
+    ...(args.network ? { network: args.network } : {}),
     validUntil: (args.now ?? Math.floor(Date.now() / 1000)) + (args.validForSec ?? 600),
     messages: [
       {

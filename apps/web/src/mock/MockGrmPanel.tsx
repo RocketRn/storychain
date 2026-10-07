@@ -1,4 +1,4 @@
-/** Mock-only replacement for the TonConnect wallet flow. Exercises /payments/ton/intent, polling and the PRO grant. */
+/** Mock-only replacement for the TonConnect wallet flow. Exercises /payments/ton/intent, polling and the boost grant. */
 import { useState } from "react";
 import type { TonIntentDTO } from "@storychain/shared/light";
 import { fromUnits } from "@storychain/shared/light";

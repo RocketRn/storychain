@@ -116,4 +116,21 @@ describe("buildTransferRequest (TEP-74 jetton transfer)", () => {
     });
     expect(decode(body.toBoc().toString("base64")).comment).toBe("ref-Привет-✓");
   });
+
+  it("carries the demanded network so a wallet on another network refuses the request", () => {
+    const req = buildTransferRequest({
+      intent,
+      sender: sender.toString(),
+      jettonWallet: jettonWallet.toString(),
+      network: "-239",
+    });
+    expect(req.network).toBe("-239");
+    expect(
+      buildTransferRequest({
+        intent,
+        sender: sender.toString(),
+        jettonWallet: jettonWallet.toString(),
+      }),
+    ).not.toHaveProperty("network");
+  });
 });

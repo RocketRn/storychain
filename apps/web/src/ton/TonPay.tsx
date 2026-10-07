@@ -48,11 +48,13 @@ function TonPayInner({ plan, chainId, prepare, onStarted, onError, disabled }: P
         {
           api,
           send: (request) => tonConnectUI.sendTransaction(request),
-          wallet: { address: wallet.account.address, testnet: wallet.account.chain === "-3" },
+          wallet: { address: wallet.account.address, chain: wallet.account.chain },
         },
         { chainId, planId: plan.id },
       );
       if (result.ok) onStarted(result.reference, TON_POLL_MS);
+      else if (result.reason === "wrong_network")
+        onError(t("wrongNetwork", { network: result.expected }));
       else onError(t(result.reason === "no_grm" ? "noGrm" : "walletRejected"));
     } catch (e) {
       onError(err(e instanceof ApiError ? e.code : "INTERNAL"));

@@ -7,6 +7,7 @@ import { startBoostSweeper } from "./boosts";
 import { TonApiIndexer } from "./payments/tonIndexer";
 import { TonVerifier } from "./payments/tonVerifier";
 import { runTonStartupCheck, tonPaymentsEnabled } from "./payments/tonStartupCheck";
+import { closeAndDrain, createShutdown } from "./shutdown";
 
 const config = loadConfig();
 const db = createDb(config.databaseUrl);
@@ -45,7 +46,6 @@ await app.listen({ port: config.port, host: "0.0.0.0" });
 verifier?.start(10_000);
 // housekeeping only: boost correctness never depends on this job (everything reads boostedUntil > now)
 const sweeper = startBoostSweeper(db);
-for (const sig of ["SIGINT", "SIGTERM"] as const) process.once(sig, () => sweeper.stop());
 
 if (bot) {
   await bot.init();
@@ -60,10 +60,12 @@ if (bot) {
       onStart: (me) => app.log.info(`bot: polling as @${me.username}`),
     });
   }
-  const stop = () => {
-    verifier?.stop();
-    void bot.stop();
-  };
-  process.once("SIGINT", stop);
-  process.once("SIGTERM", stop);
 }
+
+// Stop producing work, let in-flight requests (uploads, payment webhooks) finish, close the DB, exit.
+const shutdown = createShutdown({
+  stop: [() => verifier?.stop(), () => sweeper.stop(), () => (bot ? bot.stop() : undefined)],
+  close: [() => closeAndDrain(app), () => db.$disconnect()],
+  log: (m, d) => app.log.info(d ?? {}, m),
+});
+for (const sig of ["SIGINT", "SIGTERM"] as const) process.once(sig, () => void shutdown(sig));

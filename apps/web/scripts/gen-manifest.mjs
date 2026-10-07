@@ -13,6 +13,11 @@ if (!webapp) {
     /* no .env yet */
   }
 }
+if (!webapp)
+  console.warn(
+    "WARNING: WEBAPP_URL is not set, so the TonConnect manifest points at http://localhost:5173. " +
+      "Real wallets reject GRM payments with that: set WEBAPP_URL before building for production.",
+  );
 const url = (webapp || "http://localhost:5173").replace(/\/$/, "");
 const manifest = { url, name: "StoryChain", iconUrl: `${url}/icon-180.png` };
 writeFileSync(

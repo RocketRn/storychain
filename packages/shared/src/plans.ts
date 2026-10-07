@@ -17,6 +17,10 @@ export function isBoostPlanId(id: string): id is BoostPlanId {
   return Object.prototype.hasOwnProperty.call(BOOST_PLANS, id);
 }
 
+export type TonNetwork = "mainnet" | "testnet";
+/** TonConnect `CHAIN` ids: what a connected wallet reports as its network, and what a request may demand. */
+export const TON_CHAIN_ID: Record<TonNetwork, string> = { mainnet: "-239", testnet: "-3" };
+
 export type Platform = "ios" | "android" | "tdesktop" | "macos" | "weba" | "web" | "unknown";
 
 /**

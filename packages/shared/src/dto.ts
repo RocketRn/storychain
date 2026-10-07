@@ -1,3 +1,5 @@
+import type { TonNetwork } from "./plans";
+
 export interface UserDTO {
   id: string;
   telegramId: string;
@@ -112,7 +114,15 @@ export interface TonIntentDTO {
   forwardTonAmount: string;
   /** nanoTON attached to the message sent to the user's Jetton wallet (gas) */
   gasAmount: string;
+  /** the network the server watches: a payment made anywhere else is never seen */
+  network: TonNetwork;
   expiresAt: string;
+}
+
+export interface JettonWalletDTO {
+  owner: string;
+  jettonWallet: string;
+  network: TonNetwork;
 }
 
 export interface PaymentStatusDTO {

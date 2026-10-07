@@ -15,6 +15,7 @@ const intent = {
   decimals: 9,
   forwardTonAmount: "10000000",
   gasAmount: "100000000",
+  network: "mainnet",
   expiresAt: "2030-01-01T00:00:00.000Z",
 };
 const apiError = (status: number) => Object.assign(new Error(`HTTP ${status}`), { status });
@@ -30,7 +31,7 @@ function setup(
   const calls: string[] = [];
   const get = vi.fn(async (path: string) => {
     calls.push(`GET ${path.split("?")[0]}`);
-    return (await (over.wallet ?? (async () => ({ jettonWallet })))()) as never;
+    return (await (over.wallet ?? (async () => ({ jettonWallet, network: "mainnet" })))()) as never;
   });
   const post = vi.fn(async (path: string, _body?: unknown) => {
     calls.push(`POST ${path}`);
@@ -48,7 +49,7 @@ function setup(
   const deps: PayFlowDeps = {
     api: { get, post },
     send,
-    wallet: { address: payer, testnet: false },
+    wallet: { address: payer, chain: "-239" },
   };
   return { deps, calls, get, post, send };
 }
@@ -147,10 +148,57 @@ describe("startGrmPayment", () => {
     expect(post).toHaveBeenCalledWith("/api/payments/ton/confirm", { reference: intent.reference });
   });
 
-  it("passes the testnet flag through to the Jetton wallet address", async () => {
-    const { deps, send } = setup();
-    await startGrmPayment({ ...deps, wallet: { address: payer, testnet: true } }, args);
-    const address = send.mock.calls[0]?.[0].messages[0]?.address ?? "";
-    expect(Address.isFriendly(address) && Address.parseFriendly(address).isTestOnly).toBe(true);
+  describe("networks", () => {
+    it("demands the server's network from the wallet (a wallet on another network refuses the request)", async () => {
+      const { deps, send } = setup();
+      await startGrmPayment(deps, args);
+      expect(send.mock.calls[0]?.[0].network).toBe("-239");
+      const address = send.mock.calls[0]?.[0].messages[0]?.address ?? "";
+      expect(Address.parseFriendly(address).isTestOnly).toBe(false);
+    });
+
+    it("testnet server + testnet wallet: test-only address format and the testnet chain id", async () => {
+      const { deps, send } = setup({
+        wallet: async () => ({ jettonWallet, network: "testnet" }),
+        intent: async () => ({ ...intent, network: "testnet" }),
+      });
+      await startGrmPayment({ ...deps, wallet: { address: payer, chain: "-3" } }, args);
+      const req = send.mock.calls[0]?.[0];
+      expect(req?.network).toBe("-3");
+      expect(Address.parseFriendly(req?.messages[0]?.address ?? "").isTestOnly).toBe(true);
+    });
+
+    it("a wallet on the WRONG network is told so before anything is ordered or signed", async () => {
+      const mainnetServer = setup();
+      expect(
+        await startGrmPayment(
+          { ...mainnetServer.deps, wallet: { address: payer, chain: "-3" } },
+          args,
+        ),
+      ).toEqual({ ok: false, reason: "wrong_network", expected: "mainnet" });
+      expect(mainnetServer.post).not.toHaveBeenCalled();
+      expect(mainnetServer.send).not.toHaveBeenCalled();
+
+      const testnetServer = setup({ wallet: async () => ({ jettonWallet, network: "testnet" }) });
+      expect(await startGrmPayment(testnetServer.deps, args)).toEqual({
+        ok: false,
+        reason: "wrong_network",
+        expected: "testnet",
+      });
+      expect(testnetServer.post).not.toHaveBeenCalled();
+    });
+
+    it("an older server that does not report a network: no pre-check, no network demanded", async () => {
+      const { deps, send } = setup({
+        wallet: async () => ({ jettonWallet }),
+        intent: async () => ({ ...intent, network: undefined }),
+      });
+      expect(
+        await startGrmPayment({ ...deps, wallet: { address: payer, chain: "-3" } }, args),
+      ).toMatchObject({
+        ok: true,
+      });
+      expect(send.mock.calls[0]?.[0].network).toBeUndefined();
+    });
   });
 });

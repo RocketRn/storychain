@@ -660,6 +660,7 @@ describe("TON HTTP endpoints", () => {
       decimals: 9,
       forwardTonAmount: "10000000",
       gasAmount: "100000000",
+      network: "mainnet",
     });
     expect(body.reference).toMatch(/^[A-Za-z0-9]{16}$/);
     // The reference Jetton wallet bounces (exit 709) unless the attached TON exceeds
@@ -883,7 +884,11 @@ describe("TON HTTP endpoints", () => {
       indexer.walletCalls = 0;
       const r1 = await get(OTHER.toString());
       expect(r1.statusCode).toBe(200);
-      expect(r1.json()).toEqual({ owner: OTHER.toRawString(), jettonWallet: indexer.wallet });
+      expect(r1.json()).toEqual({
+        owner: OTHER.toRawString(),
+        jettonWallet: indexer.wallet,
+        network: "mainnet",
+      });
       await get(OTHER.toString({ bounceable: false }));
       await get(OTHER.toRawString());
       expect(indexer.walletCalls).toBe(1);

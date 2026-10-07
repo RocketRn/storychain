@@ -5,6 +5,7 @@ import {
   allowedMethods,
   createPaymentSchema,
   tonConfirmSchema,
+  type JettonWalletDTO,
   type PaymentStatusDTO,
   type StarsInvoiceDTO,
   type TonIntentDTO,
@@ -124,6 +125,7 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Deps): void {
         decimals: config.ton.decimals,
         forwardTonAmount: FORWARD_TON_NANO,
         gasAmount: GAS_TON_NANO,
+        network: config.ton.network,
         expiresAt: expiresAt.toISOString(),
       };
     },
@@ -155,7 +157,7 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Deps): void {
   app.get(
     "/api/ton/jetton-wallet",
     { preHandler: requireAuth, config: { rateLimit: { max: 30, timeWindow: "1 minute" } } },
-    async (req) => {
+    async (req): Promise<JettonWalletDTO> => {
       const { owner } = z.object({ owner: z.string().min(10).max(80) }).parse(req.query);
       let ownerRaw: string;
       try {
@@ -165,12 +167,13 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Deps): void {
       }
       if (!deps.indexer) throw errors.methodUnavailable("TON indexer is not configured");
       const hit = walletCache.get(ownerRaw);
-      if (hit) return { owner: ownerRaw, jettonWallet: hit };
+      const network = config.ton.network;
+      if (hit) return { owner: ownerRaw, jettonWallet: hit, network };
       const wallet = await deps.indexer.getJettonWallet(ownerRaw, config.ton.jettonMaster);
       if (!wallet)
         throw errors.notFound("No Jetton wallet for this owner: the account holds no GRM");
       walletCache.set(ownerRaw, wallet);
-      return { owner: ownerRaw, jettonWallet: wallet };
+      return { owner: ownerRaw, jettonWallet: wallet, network };
     },
   );
 }
