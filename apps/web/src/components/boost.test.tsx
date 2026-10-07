@@ -43,7 +43,7 @@ describe("dictionary: the PRO / quota / paywall vocabulary is gone (RU + EN)", (
         expect(key, `${lang}.${key}`).not.toMatch(
           /^(pro[A-Z]|free[A-Z]|paywall|benefit|daily|used[A-Z]|getPro|planName|extendHint)/,
         );
-        expect(key).not.toMatch(/^err_(DAILY_LIMIT|PRO_REQUIRED)/);
+        expect(key).not.toMatch(/^err_(DAILY_LIM|PRO_REQ)/);
         expect(text, `${lang}.${key}`).not.toMatch(/\bPRO\b|paywall/);
       }
     }

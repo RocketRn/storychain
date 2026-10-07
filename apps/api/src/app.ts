@@ -24,6 +24,9 @@ import type { TonIndexer } from "./payments/tonIndexer";
 import type { TonVerifier } from "./payments/tonVerifier";
 import type { CreateInvoiceLink } from "./payments/stars";
 
+/** The whole request (headers + body) must have arrived by then. */
+export const REQUEST_TIMEOUT_MS = 120_000;
+
 export interface Deps {
   config: Config;
   db: Db;
@@ -67,6 +70,9 @@ export async function buildApp(deps: Deps): Promise<FastifyInstance> {
     },
     bodyLimit: 256 * 1024,
     trustProxy: config.trustProxy,
+    // Fastify's default (0) switches Node's own 5 minute limit OFF: a client could send headers and then dribble the
+    // body forever, holding a socket (and a multipart buffer) per connection. The web client gives an upload 60 s.
+    requestTimeout: REQUEST_TIMEOUT_MS,
   });
 
   await app.register(

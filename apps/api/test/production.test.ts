@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { REQUEST_TIMEOUT_MS } from "../src/app";
 import { signInitData } from "../src/auth/initData";
 import {
   authHeader,
@@ -33,6 +34,12 @@ describe("single-origin mode (API serves the built web app)", () => {
   afterAll(async () => {
     await ctx.app.close();
     await ctx.db.$disconnect();
+  });
+
+  it("bounds how long a request may take to arrive (Fastify's default of 0 would switch Node's own limit off)", () => {
+    expect(ctx.app.server.requestTimeout).toBe(REQUEST_TIMEOUT_MS);
+    expect(REQUEST_TIMEOUT_MS).toBeGreaterThan(60_000); // longer than the client's own 60 s upload budget
+    expect(REQUEST_TIMEOUT_MS).toBeLessThanOrEqual(300_000);
   });
 
   it("serves index.html at / and for client-side routes (SPA fallback), uncached", async () => {
