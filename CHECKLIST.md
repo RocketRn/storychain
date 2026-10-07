@@ -92,7 +92,10 @@ Legend: ☐ to do. Run each item on **Android**, **iOS** and **Desktop** unless 
 - ☐ Underpay by a bit (send less than the price) → stays pending, no boost is applied.
 - ☐ Reject the transaction in the wallet → friendly "rejected in the wallet" message.
 - ☐ Wallet returns to the Mini App after signing (`twaReturnUrl`; set `VITE_BOT_USERNAME` / `VITE_APP_SHORT_NAME`).
-- ☐ The manifest URL (`/tonconnect-manifest.json`) is reachable over https and shows the right name/icon in the wallet.
+- ☐ The manifest URL (`/tonconnect-manifest.json`) is reachable over https and shows the right name/icon in the wallet. (The API refuses to start in production when the built manifest's origin differs from `WEBAPP_URL`.)
+- ☐ **Gas buffer (testnet first, then a small mainnet transfer):** the transfer attaches 0.1 TON with a 0.01 TON forward amount; the unused part must come back to the payer. Confirm the Jetton transfer is NOT bounced (exit code 709 = "not enough TON" for that Jetton wallet implementation) and the merchant sees the transfer notification with the comment.
+- ☐ A wallet on the wrong network (testnet wallet against a mainnet server and vice versa) gets "Switch your wallet to …" before any order exists.
+- ☐ A user who holds no GRM gets "This wallet holds no GRM" and **no** pending order is created (`Transaction` table stays empty for that attempt).
 
 ## 5. Operations
 
@@ -101,4 +104,9 @@ Legend: ☐ to do. Run each item on **Android**, **iOS** and **Desktop** unless 
 - ☐ Production start refuses `DEV_MODE=true`, missing `TON_MERCHANT_ADDRESS`/`BOT_TOKEN`/…, and a non-https `PUBLIC_BASE_URL`.
 - ☐ Uploads use S3 (or a persistent volume) and survive a restart; images are reachable by https from Telegram's servers.
 - ☐ Moderation: set `Chain.isHidden` / `Post.isHidden` in the DB → disappears everywhere (reports are stored in `Report`; there is no admin UI yet).
+- ☐ `SIGTERM` (e.g. `docker stop`) makes the API drain in-flight requests and exit within a couple of seconds (look for the `[shutdown] done` log line), not hang until SIGKILL.
+- ☐ Duplicate Stars charge: open the same invoice link in two clients, pay in both → one boost, the second charge is refunded automatically and the user is told (if `refundStarPayment` fails the log says which charge to refund by hand).
+- ☐ A re-posted card's old image URL returns 404 (local disk and S3), and a normal card's image is served with `Cache-Control: … immutable`.
+- ☐ SQLite only: run `PRAGMA optimize;` now and then (PostgreSQL maintains planner statistics itself). The feed indexes work without it, but it keeps the planner honest as data grows.
+- ☐ Housekeeping to schedule: old `expired`/`failed` rows in `Transaction` are never needed again (paid and refunded rows are history - keep them).
 - ☐ Platform policy: re-read Telegram's current rules for digital goods in Mini Apps and confirm the per-platform payment flag matches.

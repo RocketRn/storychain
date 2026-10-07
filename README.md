@@ -114,7 +114,12 @@ pnpm smoke                                   # boots a throw-away instance on :3
 Production checklist: real `BOT_TOKEN`/`BOT_USERNAME`, `BOT_MODE=webhook` + `WEBHOOK_URL` + `WEBHOOK_SECRET`,
 https `PUBLIC_BASE_URL`/`WEBAPP_URL`, `TON_MERCHANT_ADDRESS`, `TONAPI_KEY`, `TRUST_PROXY=true` behind a proxy,
 `STORAGE_DRIVER=s3` (or a persistent volume), PostgreSQL. The API fails fast with a clear message when a required variable
-is missing, `DEV_MODE=true` is set, or `PUBLIC_BASE_URL` is not https. Compression is left to the reverse proxy.
+is missing, `DEV_MODE=true` is set, `PUBLIC_BASE_URL`/`WEBAPP_URL`/`TONCONNECT_MANIFEST_URL` are not https, `BOT_TOKEN` does
+not look like a BotFather token (a placeholder would make logins forgeable), or the web build's TonConnect manifest points at
+another origin than `WEBAPP_URL` (build with `WEBAPP_URL` set). Compression is left to the reverse proxy.
+
+`SIGTERM`/`SIGINT` shut down gracefully: background jobs stop, in-flight requests finish, the database closes, then the
+process exits (10 s watchdog), so rolling deploys do not cut uploads or payment webhooks off.
 
 ### Database
 
@@ -178,6 +183,7 @@ Everything configurable is in `.env` (see [`.env.example`](./.env.example) for c
 | `NODE_ENV`                                                                                                           | `development`                     | `production` enables fail-fast checks and single-origin serving                                                      |
 | `PORT`                                                                                                               | `3000`                            | API port                                                                                                             |
 | `DEV_MODE`                                                                                                           | `false`                           | Enables `/api/dev/*` and mock helpers. **Refused in production**                                                     |
+| `ALLOW_REMOTE_DEV_MODE`                                                                                              | `false`                           | `DEV_MODE` is refused on non-local `WEBAPP_URL`/`PUBLIC_BASE_URL` unless this is `true`.                             |
 | `CORS_ORIGINS`                                                                                                       | `http://localhost:5173`           | Comma-separated allowlist                                                                                            |
 | `SERVE_WEB` / `WEB_DIST_DIR`                                                                                         | on in prod / `../web/dist`        | Serve the built web app from the API                                                                                 |
 | `TRUST_PROXY`                                                                                                        | `false`                           | Trust `X-Forwarded-For` (set behind a proxy/tunnel)                                                                  |
@@ -221,19 +227,29 @@ Everything configurable is in `.env` (see [`.env.example`](./.env.example) for c
 | `pnpm smoke`                                  | after `pnpm build`: boots the single-origin server and checks it over HTTP (incl. upload round-trip)                                                                                                                                                             |
 | `pnpm --filter @storychain/web analyze`       | bundle treemap (`dist/stats.html`)                                                                                                                                                                                                                               |
 
+## Security & performance audit
+
+[`AUDIT.md`](./AUDIT.md) lists what was reviewed (TON payment verification, Telegram `initData` validation, database
+queries, UX responsiveness), what was found, what was changed and what is left for the owner.
+
 ## Known limitations
 
 - **Unverified against the real world:** TonAPI response shapes/endpoints and GRAM's TEP-74 transfer notification (see
   `DECISIONS.md`; confirm with the small mainnet transfer in `CHECKLIST.md`), and real-client behavior of `shareToStory`/widget links.
 - The TON poller and the in-memory rate limiter are per process: run one API instance (or move both to Redis/a leader lock).
-- Local-disk storage is single-node; use S3 for anything else. Uploaded files orphaned by a lost race are not garbage-collected.
+- Local-disk storage is single-node; use S3 for anything else. A re-posted card (and a card whose database write failed) is
+  deleted from storage; uploads from before this was added are not swept.
 - Moderation is `isHidden` flags in the DB plus stored reports — there is no admin UI.
 - Telegram never refreshes `initData`; sessions are accepted for `INITDATA_MAX_AGE_SEC` (24 h), after which the user must reopen the app.
 - `sharedToStory` is best-effort analytics: Telegram gives no callback for a completed story.
 - The attribution badge is applied server-side; a user cannot opt out of it (and the client never bakes it in).
 - Boost refunds for GRM are manual (there is no on-chain refund flow); a paid-then-hidden chain also needs a manual refund.
-- "Trending" is "most participants"; lists use offset cursors (fine at this scale).
-- The TonConnect chunk (≈ 215 kB gzip) is large but only loads after the user picks GRM; the main bundle is ≈ 145 kB gzip.
+- "Trending" is "most participants". Lists use keyset cursors (stable while rows are added or re-ranked); an item that
+  overtakes the scroll position is skipped rather than shown twice.
+- The TonConnect chunk (≈ 215 kB gzip) is large but only loads after the user picks GRM. The framework (React, router,
+  query ≈ 131 kB gzip) is a separate long-lived `vendor` chunk; the app entry itself is ≈ 17 kB gzip.
+- Remaining `pnpm audit` findings are dev tooling without an upstream fix (Prisma CLI's `deepmerge-ts`, Tailwind 3's `braces`
+  and `postcss-selector-parser`); nothing from them ships. See [`AUDIT.md`](./AUDIT.md).
 
 ## Troubleshooting
 
