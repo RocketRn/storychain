@@ -15,8 +15,9 @@
     "format": "prettier --write .",
     "typecheck": "pnpm -r typecheck && tsc -p e2e/tsconfig.json",
     "e2e": "playwright test",
-    "setup": "node scripts/setup.mjs",
-    "smoke": "node scripts/smoke-single-origin.mjs"
+    "smoke": "node scripts/smoke-single-origin.mjs",
+    "bootstrap": "node scripts/setup.mjs",
+    "postinstall": "pnpm --filter @storychain/api db:generate"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",

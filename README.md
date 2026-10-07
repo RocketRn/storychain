@@ -25,7 +25,7 @@ Requirements: **Node ≥ 20** and **pnpm ≥ 9** (`corepack enable` gets you pnp
 
 ```bash
 pnpm install
-pnpm setup        # creates .env (mock mode), generates the Prisma client, migrates + seeds the SQLite DB
+pnpm bootstrap    # creates .env (mock mode), generates the Prisma client, migrates + seeds the SQLite DB
 pnpm dev          # api http://localhost:3000, web http://localhost:5173
 ```
 
