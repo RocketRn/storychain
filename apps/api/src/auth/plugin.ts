@@ -28,7 +28,7 @@ export const authContext = (config: Config, db: Db) =>
       const header = req.headers.authorization;
       if (!header?.startsWith("tma ")) return;
       try {
-        const data = validateInitData(header.slice(4), config.botToken);
+        const data = validateInitData(header.slice(4), config.botToken, config.initDataMaxAgeSec);
         req.user = await upsertTgUser(db, data.user, false);
       } catch (e) {
         if (!(e instanceof InitDataError)) throw e;

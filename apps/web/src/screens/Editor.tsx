@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { getTemplate, TEMPLATES, type CreatePostResultDTO } from "@storychain/shared";
+import { getTemplate, TEMPLATES, type CreatePostResultDTO } from "@storychain/shared/light";
 import { api, ApiError } from "../lib/api";
 import { useI18n } from "../lib/i18n";
 import { qk, useChain, useSession } from "../lib/queries";
@@ -115,6 +115,7 @@ export default function Editor() {
       void qc.invalidateQueries({ queryKey: qk.posts(id) });
       void qc.invalidateQueries({ queryKey: ["chains"] });
       void qc.invalidateQueries({ queryKey: qk.session });
+      void qc.invalidateQueries({ queryKey: qk.myPosts });
     } catch (e) {
       tg.HapticFeedback.notification("error");
       const code = e instanceof ApiError ? e.code : "INTERNAL";

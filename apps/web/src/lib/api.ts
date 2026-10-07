@@ -1,4 +1,4 @@
-import type { ApiErrorBody, ErrorCode } from "@storychain/shared";
+import type { ApiErrorBody, ErrorCode } from "@storychain/shared/light";
 import { tg } from "./tg";
 
 export class ApiError extends Error {

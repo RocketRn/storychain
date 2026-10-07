@@ -1,6 +1,6 @@
 import "./polyfill";
 import { Address, beginCell, type Cell } from "@ton/core";
-import type { TonIntentDTO } from "@storychain/shared";
+import type { TonIntentDTO } from "@storychain/shared/light";
 
 /** TEP-74 `transfer` op code. */
 export const JETTON_TRANSFER_OP = 0x0f8a7ea5;

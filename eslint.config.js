@@ -23,7 +23,18 @@ export default tseslint.config(
   {
     // plain Node ESM scripts
     files: ["**/*.mjs"],
-    languageOptions: { globals: { process: "readonly", console: "readonly", URL: "readonly" } },
+    languageOptions: {
+      globals: {
+        process: "readonly",
+        console: "readonly",
+        URL: "readonly",
+        URLSearchParams: "readonly",
+        fetch: "readonly",
+        FormData: "readonly",
+        Blob: "readonly",
+        setTimeout: "readonly",
+      },
+    },
   },
   {
     rules: {

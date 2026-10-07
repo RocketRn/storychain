@@ -64,7 +64,7 @@ describe("auth", () => {
 
     const expired = await ctx.app.inject({
       url: "/api/me",
-      headers: authHeader(id, { authDate: Math.floor(Date.now() / 1000) - 10_000 }),
+      headers: authHeader(id, { authDate: Math.floor(Date.now() / 1000) - 2 * 86_400 }),
     });
     expect(expired.statusCode).toBe(401);
   });

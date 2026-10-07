@@ -4,6 +4,9 @@ import {
   FREE_DAILY_LIMIT,
   PLANS,
   reportSchema,
+  listPostsQuerySchema,
+  type MyPostDTO,
+  type Page,
   type PlansDTO,
   type SessionDTO,
 } from "@storychain/shared";
@@ -12,6 +15,7 @@ import type { Deps } from "../app";
 import { requireAuth, user } from "../auth/plugin";
 import { errors } from "../errors";
 import { upsertTgUser, buildSession } from "../services/users";
+import { toPostDTO } from "../services/posts";
 import { validateInitData } from "../auth/initData";
 
 export function registerMiscRoutes(app: FastifyInstance, deps: Deps): void {
@@ -22,13 +26,34 @@ export function registerMiscRoutes(app: FastifyInstance, deps: Deps): void {
   app.post("/api/auth/session", { preHandler: requireAuth }, async (req): Promise<SessionDTO> => {
     // Re-validate to refresh profile/premium flag and lastSeenAt
     const raw = (req.headers.authorization ?? "").slice(4);
-    const data = validateInitData(raw, config.botToken);
+    const data = validateInitData(raw, config.botToken, config.initDataMaxAgeSec);
     const me = await upsertTgUser(db, data.user, true);
     return buildSession(db, me);
   });
 
   app.get("/api/me", { preHandler: requireAuth }, async (req): Promise<SessionDTO> => {
     return buildSession(db, user(req));
+  });
+
+  app.get("/api/me/posts", { preHandler: requireAuth }, async (req): Promise<Page<MyPostDTO>> => {
+    const me = user(req);
+    const q = listPostsQuerySchema.parse(req.query);
+    const offset = q.cursor ? Number(q.cursor) : 0;
+    if (!Number.isInteger(offset) || offset < 0) throw errors.badRequest("Bad cursor");
+    const rows = await db.post.findMany({
+      where: { userId: me.id, isHidden: false, chain: { isHidden: false } },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      skip: offset,
+      take: 31,
+      include: { user: true, chain: true },
+    });
+    return {
+      items: rows.slice(0, 30).map((p) => ({
+        ...toPostDTO(p, me.id),
+        chain: { id: p.chain.id, title: p.chain.title, emoji: p.chain.emoji },
+      })),
+      nextCursor: rows.length > 30 ? String(offset + 30) : null,
+    };
   });
 
   app.get("/api/plans", { preHandler: requireAuth }, async (req): Promise<PlansDTO> => {

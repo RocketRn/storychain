@@ -122,3 +122,8 @@ export interface PaymentStatusDTO {
   isPro: boolean;
   proUntil: string | null;
 }
+
+/** A post in "my posts" with its chain, for the Profile screen. */
+export interface MyPostDTO extends PostDTO {
+  chain: { id: string; title: string; emoji: string | null };
+}

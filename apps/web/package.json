@@ -5,11 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "cross-env VITE_DEV_MOCK=false tsc --noEmit && cross-env VITE_DEV_MOCK=false vite build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
     "predev": "node scripts/gen-manifest.mjs",
-    "prebuild": "node scripts/gen-manifest.mjs"
+    "prebuild": "node scripts/gen-manifest.mjs",
+    "analyze": "cross-env VITE_DEV_MOCK=false ANALYZE=1 vite build"
   },
   "dependencies": {
     "@storychain/shared": "workspace:*",
@@ -26,7 +27,9 @@
     "@types/react-dom": "^18.3.5",
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.20",
+    "cross-env": "^10.1.0",
     "postcss": "^8.4.49",
+    "rollup-plugin-visualizer": "^7.1.1",
     "tailwindcss": "^3.4.17",
     "vite": "^6.0.3",
     "vitest": "^2.1.8"

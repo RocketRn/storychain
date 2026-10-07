@@ -1,4 +1,4 @@
-import { FONT_WEIGHTS, type Template } from "@storychain/shared";
+import { FONT_WEIGHTS, type Template } from "@storychain/shared/light";
 import "./fonts.css";
 
 export const canvasFont = (family: string, size: number): string =>

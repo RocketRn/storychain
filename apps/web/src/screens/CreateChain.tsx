@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { createChainSchema } from "@storychain/shared";
+import { normalizeChainInput } from "@storychain/shared/light";
 import { useI18n } from "../lib/i18n";
 import { ApiError } from "../lib/api";
 import { tg } from "../lib/tg";
@@ -19,17 +19,13 @@ export function CreateChain() {
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
-    const parsed = createChainSchema.safeParse({
-      title,
-      ...(emoji.trim() ? { emoji } : {}),
-      ...(description.trim() ? { description } : {}),
-    });
-    if (!parsed.success) {
+    const input = normalizeChainInput({ title, emoji, description });
+    if (!input) {
       setError(t("titleHint"));
       return;
     }
     try {
-      const chain = await create.mutateAsync(parsed.data);
+      const chain = await create.mutateAsync(input);
       tg.HapticFeedback.notification("success");
       navigate(`/chain/${chain.id}`, { replace: true });
     } catch (e2) {

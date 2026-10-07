@@ -1,5 +1,5 @@
-import { mkdirSync } from "node:fs";
-import { resolve } from "node:path";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import Fastify, { type FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
@@ -34,20 +34,60 @@ export interface Deps {
   verifier?: TonVerifier;
   /** override of the Stars invoice-link creator (tests) */
   createInvoiceLink?: CreateInvoiceLink;
+  /** destination for the structured log (tests); default stdout */
+  logStream?: { write(msg: string): void };
 }
 
 export async function buildApp(deps: Deps): Promise<FastifyInstance> {
   const { config, db, storage } = deps;
+  const webIndex = config.serveWeb ? join(config.webDistDir, "index.html") : null;
+  if (webIndex && !existsSync(webIndex)) {
+    throw new Error(
+      `SERVE_WEB is on but ${webIndex} does not exist. Run "pnpm build" first (or set SERVE_WEB=false).`,
+    );
+  }
   const app = Fastify({
     logger: {
-      level: config.nodeEnv === "test" ? "silent" : "info",
+      level: config.nodeEnv === "test" && !deps.logStream ? "silent" : "info",
       // never log credentials: initData lives in Authorization, bot token / keys only in env
-      redact: ["req.headers.authorization", "req.headers.cookie", "*.botToken", "*.apiKey"],
+      redact: [
+        "req.headers.authorization",
+        "req.headers.cookie",
+        "*.botToken",
+        "*.apiKey",
+        "*.initData",
+      ],
+      ...(deps.logStream ? { stream: deps.logStream } : {}),
     },
     bodyLimit: 256 * 1024,
+    trustProxy: config.trustProxy,
   });
 
-  await app.register(helmet, { crossOriginResourcePolicy: { policy: "cross-origin" } });
+  await app.register(
+    helmet,
+    config.serveWeb
+      ? {
+          crossOriginResourcePolicy: { policy: "cross-origin" },
+          // Telegram Web embeds Mini Apps in an iframe: allow it via CSP frame-ancestors instead of X-Frame-Options
+          frameguard: false,
+          contentSecurityPolicy: {
+            directives: {
+              defaultSrc: ["'self'"],
+              scriptSrc: ["'self'", "https://telegram.org"],
+              styleSrc: ["'self'", "'unsafe-inline'"],
+              imgSrc: ["'self'", "data:", "blob:", "https:"],
+              // TonConnect talks to wallet bridges / lists over https and event streams
+              connectSrc: ["'self'", "https:", "wss:"],
+              fontSrc: ["'self'"],
+              frameAncestors: ["'self'", "https://web.telegram.org", "https://*.telegram.org"],
+              objectSrc: ["'none'"],
+              baseUri: ["'self'"],
+              upgradeInsecureRequests: config.isProd ? [] : null,
+            },
+          },
+        }
+      : { crossOriginResourcePolicy: { policy: "cross-origin" } },
+  );
   await app.register(cors, {
     origin: config.corsOrigins,
     allowedHeaders: ["Authorization", "Content-Type", "X-TG-Platform"],
@@ -59,6 +99,8 @@ export async function buildApp(deps: Deps): Promise<FastifyInstance> {
     max: 240,
     timeWindow: "1 minute",
     keyGenerator: (req) => (req.user ? `u:${req.user.id}` : `ip:${req.ip}`),
+    // only the API is rate limited; static assets (many files per page load, shared NAT IPs) are not
+    allowList: (req) => !req.url.startsWith("/api/"),
   });
 
   if (storage instanceof LocalDiskStorage) {
@@ -88,11 +130,49 @@ export async function buildApp(deps: Deps): Promise<FastifyInstance> {
     req.log.error({ err }, "unhandled error");
     return send(500, "INTERNAL", "Internal server error");
   });
-  app.setNotFoundHandler((_req, reply) =>
-    reply
+  const indexHtml = webIndex ? readFileSync(webIndex, "utf8") : null;
+  app.setNotFoundHandler((req, reply) => {
+    // Single-origin mode: client-side routes (/chain/abc, /pro, ...) get the SPA shell
+    if (
+      indexHtml &&
+      req.method === "GET" &&
+      !req.url.startsWith("/api/") &&
+      !req.url.startsWith("/uploads/")
+    ) {
+      return reply
+        .code(200)
+        .header("cache-control", "no-cache")
+        .type("text/html; charset=utf-8")
+        .send(indexHtml);
+    }
+    return reply
       .code(404)
-      .send({ error: { code: "NOT_FOUND", message: "Route not found" } } satisfies ApiErrorBody),
-  );
+      .send({ error: { code: "NOT_FOUND", message: "Route not found" } } satisfies ApiErrorBody);
+  });
+
+  if (config.serveWeb) {
+    await app.register(fastifyStatic, {
+      root: config.webDistDir,
+      prefix: "/",
+      decorateReply: false, // the uploads registration above owns sendFile
+      index: ["index.html"],
+      cacheControl: false,
+      setHeaders(res, path) {
+        // hashed build assets never change; everything else (index.html, manifest, icons) must revalidate
+        res.setHeader(
+          "cache-control",
+          /[\\/]assets[\\/]/.test(path)
+            ? "public, max-age=31536000, immutable"
+            : path.includes("fonts")
+              ? "public, max-age=86400"
+              : "no-cache",
+        );
+        // wallets fetch the TonConnect manifest cross-origin
+        if (path.endsWith("tonconnect-manifest.json"))
+          res.setHeader("access-control-allow-origin", "*");
+      },
+    });
+  }
 
   registerMiscRoutes(app, deps);
   registerChainRoutes(app, deps);

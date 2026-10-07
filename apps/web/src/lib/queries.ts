@@ -2,12 +2,13 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tansta
 import type {
   ChainDetailDTO,
   ChainDTO,
-  CreateChainInput,
+  ChainInput,
+  MyPostDTO,
   Page,
   PlansDTO,
   PostDTO,
   SessionDTO,
-} from "@storychain/shared";
+} from "@storychain/shared/light";
 import { api } from "./api";
 
 export const qk = {
@@ -16,6 +17,7 @@ export const qk = {
   chain: (id: string) => ["chain", id] as const,
   posts: (id: string) => ["posts", id] as const,
   plans: ["plans"] as const,
+  myPosts: ["my-posts"] as const,
 };
 
 export const useSession = () =>
@@ -58,7 +60,16 @@ export const useChainPosts = (id: string, enabled: boolean) =>
 export const useCreateChain = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: CreateChainInput) => api.post<ChainDTO>("/api/chains", input),
+    mutationFn: (input: ChainInput) => api.post<ChainDTO>("/api/chains", input),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["chains"] }),
   });
 };
+
+export const useMyPosts = () =>
+  useInfiniteQuery({
+    queryKey: qk.myPosts,
+    queryFn: ({ pageParam }) =>
+      api.get<Page<MyPostDTO>>(`/api/me/posts${pageParam ? `?cursor=${pageParam}` : ""}`),
+    initialPageParam: "",
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+  });

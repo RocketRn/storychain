@@ -14,9 +14,12 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "typecheck": "pnpm -r typecheck && tsc -p e2e/tsconfig.json",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "setup": "node scripts/setup.mjs",
+    "smoke": "node scripts/smoke-single-origin.mjs"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@eslint/js": "^9.17.0",
     "@playwright/test": "^1.63.0",
     "@types/node": "^22.20.5",

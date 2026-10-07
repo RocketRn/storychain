@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import { z } from "zod";
 import { toUnits } from "@storychain/shared";
 
@@ -8,6 +9,18 @@ const schema = z.object({
   PORT: z.coerce.number().int().default(3000),
   DEV_MODE: bool,
   CORS_ORIGINS: z.string().default("http://localhost:5173"),
+  /** Serve the built web app (apps/web/dist) from this process: single-origin mode. Default: on in production. */
+  SERVE_WEB: z.enum(["true", "false"]).optional(),
+  WEB_DIST_DIR: z.string().default(""),
+  /** Behind a reverse proxy / tunnel: trust X-Forwarded-* so rate limits see the real client IP */
+  TRUST_PROXY: bool,
+  /** How long Telegram initData is accepted after its auth_date (seconds) */
+  INITDATA_MAX_AGE_SEC: z.coerce
+    .number()
+    .int()
+    .min(60)
+    .max(7 * 86400)
+    .default(86400),
   DATABASE_URL: z.string().default("file:./dev.db"),
   BOT_TOKEN: z.string().default(""),
   BOT_USERNAME: z.string().default("storychain_bot"),
@@ -91,6 +104,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
     corsOrigins: e.CORS_ORIGINS.split(",")
       .map((s) => s.trim())
       .filter(Boolean),
+    serveWeb: (e.SERVE_WEB ?? (isProd ? "true" : "false")) === "true",
+    webDistDir: resolve(e.WEB_DIST_DIR || "../web/dist"),
+    trustProxy: e.TRUST_PROXY === "true",
+    initDataMaxAgeSec: e.INITDATA_MAX_AGE_SEC,
     databaseUrl: e.DATABASE_URL,
     botToken: e.BOT_TOKEN || (devMode ? "000000:dev-token-change-me" : ""),
     botUsername: e.BOT_USERNAME,

@@ -1,5 +1,5 @@
 /** Exposes renderCard to Playwright. Imported only when VITE_DEV_MOCK=true (tree-shaken from production). */
-import { getTemplate } from "@storychain/shared";
+import { getTemplate } from "@storychain/shared/light";
 import { DEFAULT_VIEW, type View } from "./layout";
 import { loadPhoto } from "./photo";
 import { renderCard } from "./renderCard";

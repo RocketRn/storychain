@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ALL_FONTS, isPremiumFont, TEMPLATES, type Template } from "@storychain/shared";
+import { ALL_FONTS, isPremiumFont, TEMPLATES, type Template } from "@storychain/shared/light";
 import { useI18n, type Lang } from "../lib/i18n";
 import { ensureFonts } from "./fonts";
 import { DEFAULT_VIEW } from "./layout";

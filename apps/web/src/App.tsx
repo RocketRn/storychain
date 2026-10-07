@@ -1,13 +1,14 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, type ComponentType } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { parseStartParam } from "@storychain/shared";
+import { parseStartParam } from "@storychain/shared/light";
 import { detectLang, I18nContext, makeI18n } from "./lib/i18n";
 import { tg } from "./lib/tg";
 import { Home } from "./screens/Home";
 import { ChainScreen } from "./screens/Chain";
 import { CreateChain } from "./screens/CreateChain";
 import { Paywall } from "./screens/Paywall";
+import { Profile } from "./screens/Profile";
 
 // The editor (canvas, fonts, templates) is code-split: it is only needed when joining a chain
 const Editor = lazy(() => import("./screens/Editor"));
@@ -69,6 +70,7 @@ function Shell() {
             }
           />
           <Route path="/pro" element={<Paywall />} />
+          <Route path="/profile" element={<Profile />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       )}

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { PaymentStatusDTO } from "@storychain/shared";
+import type { PaymentStatusDTO } from "@storychain/shared/light";
 import { api } from "../lib/api";
 import { qk } from "../lib/queries";
 

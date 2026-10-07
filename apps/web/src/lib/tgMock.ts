@@ -141,18 +141,18 @@ export async function createMockTg(): Promise<TgFacade> {
     ? {
         bg_color: "#17212b",
         text_color: "#f5f5f5",
-        hint_color: "#708499",
+        hint_color: "#9aabbb",
         link_color: "#6ab3f3",
-        button_color: "#5288c1",
+        button_color: "#3f72ad",
         button_text_color: "#ffffff",
         secondary_bg_color: "#232e3c",
       }
     : {
         bg_color: "#ffffff",
         text_color: "#000000",
-        hint_color: "#707579",
-        link_color: "#3390ec",
-        button_color: "#3390ec",
+        hint_color: "#5c6166",
+        link_color: "#1a6fb3",
+        button_color: "#1a6fb3",
         button_text_color: "#ffffff",
         secondary_bg_color: "#f4f4f5",
       };

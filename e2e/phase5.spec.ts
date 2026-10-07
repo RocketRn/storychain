@@ -136,7 +136,14 @@ test.describe("real (non-mock) build path", () => {
 
     await page.goto("/pro");
     await expect(page.getByRole("heading", { name: "StoryChain PRO" })).toBeVisible();
-    // GRM: real TonConnect widget, loaded from its own chunk (needs the Buffer polyfill)
+    // GRM: the TonConnect chunk is only fetched once the user picks GRM
+    expect(
+      await page.evaluate(() =>
+        performance.getEntriesByType("resource").some((r) => /TonPay|tonconnect/i.test(r.name)),
+      ),
+    ).toBe(false);
+    await page.getByTestId("open-grm").click();
+    // real TonConnect widget, loaded from its own chunk (needs the Buffer polyfill)
     await expect(page.getByTestId("ton-connect")).toBeVisible({ timeout: 15_000 });
     await expect(page.locator("#tc-widget-root")).toBeAttached({ timeout: 15_000 });
     await expect(page.getByTestId("mock-grm")).toHaveCount(0);

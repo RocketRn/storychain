@@ -10,7 +10,7 @@ import {
   STICKER_W,
   TEMPLATES,
   FONT_WEIGHTS,
-} from "@storychain/shared";
+} from "@storychain/shared/light";
 import {
   clamp,
   coverRegion,

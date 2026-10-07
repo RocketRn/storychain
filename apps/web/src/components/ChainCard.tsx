@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import type { ChainDTO } from "@storychain/shared";
+import type { ChainDTO } from "@storychain/shared/light";
 import { useI18n } from "../lib/i18n";
 
 export function ChainCard({ chain, compact = false }: { chain: ChainDTO; compact?: boolean }) {

@@ -5,7 +5,7 @@ import {
   STICKER_W,
   type Decoration,
   type Template,
-} from "@storychain/shared";
+} from "@storychain/shared/light";
 import type { Lang } from "../lib/i18n";
 import { translate, translatePlural } from "../lib/i18n";
 import { canvasFont, ensureFonts, fontFor } from "./fonts";

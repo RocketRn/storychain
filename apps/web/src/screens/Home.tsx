@@ -32,6 +32,13 @@ export function Home() {
           </h1>
           <p className="text-tg-hint">{t("homeSubtitle")}</p>
         </div>
+        <Link
+          to="/profile"
+          aria-label={t("profileAria")}
+          className="order-last flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-tg-button text-lg font-bold text-tg-button-text"
+        >
+          {(s?.user.firstName ?? tg.user?.first_name ?? "?").slice(0, 1).toUpperCase()}
+        </Link>
         {s && (
           <Link to="/pro" aria-label="PRO">
             {s.isPro ? (

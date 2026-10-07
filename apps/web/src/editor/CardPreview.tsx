@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { CARD_HEIGHT, CARD_WIDTH } from "@storychain/shared";
+import { CARD_HEIGHT, CARD_WIDTH } from "@storychain/shared/light";
 import { drawCard, fontsNeeded, prepareFonts, type CardOptions } from "./renderCard";
 import { MAX_ZOOM, panView, zoomView, type View } from "./layout";
 

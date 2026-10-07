@@ -6,7 +6,7 @@ import {
   useTonConnectUI,
   useTonWallet,
 } from "@tonconnect/ui-react";
-import type { TonIntentDTO } from "@storychain/shared";
+import type { TonIntentDTO } from "@storychain/shared/light";
 import { api, ApiError } from "../lib/api";
 import { useI18n } from "../lib/i18n";
 import { Button } from "../components/ui";

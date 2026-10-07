@@ -1,6 +1,10 @@
 import { lazy, Suspense, useState, type ComponentType } from "react";
 import { Link } from "react-router-dom";
-import { FREE_DAILY_LIMIT, type PlanPriceDTO, type StarsInvoiceDTO } from "@storychain/shared";
+import {
+  FREE_DAILY_LIMIT,
+  type PlanPriceDTO,
+  type StarsInvoiceDTO,
+} from "@storychain/shared/light";
 import { api, ApiError } from "../lib/api";
 import { useI18n } from "../lib/i18n";
 import { usePlans, useSession } from "../lib/queries";
@@ -13,6 +17,11 @@ const MockGrmPanel: ComponentType<PayPanelProps> | null =
   import.meta.env.VITE_DEV_MOCK === "true" ? lazy(() => import("../mock/MockGrmPanel")) : null;
 const TonPay: ComponentType<PayPanelProps> | null =
   import.meta.env.VITE_DEV_MOCK === "true" ? null : lazy(() => import("../ton/TonPay"));
+
+// Warm the chunk on hover/focus so the click feels instant (no-op in mock builds)
+const preloadTon = () => {
+  if (import.meta.env.VITE_DEV_MOCK !== "true") void import("../ton/TonPay");
+};
 
 export interface PayPanelProps {
   plan: PlanPriceDTO;
@@ -34,6 +43,7 @@ export function Paywall() {
   const [lastRef, setLastRef] = useState<string | null>(null);
   const [lastMs, setLastMs] = useState(STARS_POLL_MS);
   const [cancelled, setCancelled] = useState(false);
+  const [grmOpen, setGrmOpen] = useState(false);
 
   if (plans.isPending || session.isPending) {
     return (
@@ -136,9 +146,27 @@ export function Paywall() {
             </Button>
           )}
           {methods.includes("ton_grm") ? (
-            <Suspense fallback={<Skeleton className="h-12" />}>
-              {MockGrmPanel ? <MockGrmPanel {...panel} /> : TonPay ? <TonPay {...panel} /> : null}
-            </Suspense>
+            MockGrmPanel ? (
+              <Suspense fallback={<Skeleton className="h-12" />}>
+                <MockGrmPanel {...panel} />
+              </Suspense>
+            ) : grmOpen && TonPay ? (
+              // TonConnect (~200 kB gz) is only downloaded once the user chooses GRM
+              <Suspense fallback={<Skeleton className="h-12" />}>
+                <TonPay {...panel} />
+              </Suspense>
+            ) : (
+              <Button
+                variant="secondary"
+                className="w-full"
+                onClick={() => setGrmOpen(true)}
+                onPointerEnter={preloadTon}
+                onFocus={preloadTon}
+                data-testid="open-grm"
+              >
+                {t("payWithGrm")}
+              </Button>
+            )
           ) : (
             <p className="text-center text-sm text-tg-hint">{t("grmUnavailableHere")}</p>
           )}

@@ -1,5 +1,5 @@
 import { createContext, useContext } from "react";
-import type { ErrorCode } from "@storychain/shared";
+import type { ErrorCode } from "@storychain/shared/light";
 
 export type Lang = "ru" | "en";
 
@@ -53,6 +53,7 @@ const ru = {
   extendHint: "Оплата продлит PRO ещё на 30 дней.",
   payStars: "Оплатить Stars · {amount} ⭐",
   payGrm: "Оплатить {amount} GRM",
+  payWithGrm: "💎 Оплатить в GRM",
   connectWallet: "Подключить кошелёк",
   payProcessing: "Платёж обрабатывается…",
   paySlow:
@@ -66,6 +67,12 @@ const ru = {
   walletRejected: "Транзакция отклонена в кошельке",
   backHome: "На главную",
   grmUnavailableHere: "Оплата GRM недоступна на этой платформе — используй Stars.",
+  profileTitle: "Профиль",
+  profileAria: "Открыть профиль",
+  myPosts: "Мои публикации",
+  noPostsYet: "Ты пока не участвовал ни в одной цепочке",
+  usedToday: "Сегодня опубликовано: {used} из {limit}",
+  proUnlimited: "PRO · без лимита",
   comingSoon: "Скоро здесь появится",
   // editor
   shareJoin: "Присоединяйся",
@@ -174,6 +181,7 @@ const en: Dict = {
   extendHint: "Paying extends PRO by another 30 days.",
   payStars: "Pay with Stars · {amount} ⭐",
   payGrm: "Pay {amount} GRM",
+  payWithGrm: "💎 Pay with GRM",
   connectWallet: "Connect wallet",
   payProcessing: "Processing payment…",
   paySlow:
@@ -187,6 +195,12 @@ const en: Dict = {
   walletRejected: "Transaction was rejected in the wallet",
   backHome: "Back to home",
   grmUnavailableHere: "GRM payments are not available on this platform — use Stars.",
+  profileTitle: "Profile",
+  profileAria: "Open profile",
+  myPosts: "My posts",
+  noPostsYet: "You haven't joined any chain yet",
+  usedToday: "Published today: {used} of {limit}",
+  proUnlimited: "PRO · unlimited",
   comingSoon: "Coming soon",
   shareJoin: "Join",
   widgetName: "Join the chain",
