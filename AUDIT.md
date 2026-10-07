@@ -1,8 +1,11 @@
 # Security, performance and code-quality audit
 
-Scope: TON payment verification, Telegram `initData` validation, database query efficiency, UX responsiveness, plus the
-code and dependencies around them. Everything below was reproduced or measured before it was changed; every fix has a
-regression test, and the important ones were mutation-checked (the fix was broken on purpose to confirm a test fails).
+Scope: TON payment verification, Telegram `initData` validation, database queries, UX responsiveness, plus the code and
+dependencies around them. Each finding was established by reading the code and, wherever possible, reproduced by a failing
+test or a measurement before it was fixed; every fix has a regression test, and the important ones were mutation-checked
+(the fix was broken on purpose to confirm a test fails). The exception is anything that depends on the real network or the
+real GRM Jetton contract (the gas buffer, TonAPI response shapes): those are marked and listed under "What the owner still
+has to do".
 
 How to read the tables: **Sev** is the severity I would assign in a production deployment, **Status** is what this
 audit did. Decisions and trade-offs are recorded in [`DECISIONS.md`](./DECISIONS.md) ("Security & performance audit").
@@ -113,8 +116,8 @@ statistics (`ANALYZE`): a fresh production SQLite has none. "After" is the same 
   `postcss-selector-parser` inside Tailwind 3. Re-run `pnpm audit` when Prisma / Tailwind move.
 - **CSP** keeps `style-src 'unsafe-inline'` (React emits inline style attributes); `script-src` is strict.
 - **CI** (`.github/workflows/ci.yml`) runs lint, typecheck, unit tests, build and a production `pnpm audit` on every push and
-  pull request. It has not been run on GitHub yet, and it deliberately leaves out `pnpm e2e` / `pnpm smoke` (browser setup
-  could not be validated here): run those by hand before a release.
+  pull request; its first run on GitHub passed. It deliberately leaves out `pnpm e2e` / `pnpm smoke` (browser setup could
+  not be validated here): run those by hand before a release.
 
 ## Reproducing the measurements
 
