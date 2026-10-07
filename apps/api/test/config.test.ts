@@ -3,7 +3,7 @@ import { loadConfig } from "../src/config";
 
 const PROD = {
   NODE_ENV: "production",
-  BOT_TOKEN: "123456789:AAH_test_token_for_unit_tests_01234",
+  BOT_TOKEN: "123456789:AAH_FAKE_fixture_not_a_real_bot_token_0123456789",
   BOT_USERNAME: "storychain_bot",
   TON_MERCHANT_ADDRESS: "UQBvW8Z5huBkMJYdnfAEM5JqTNkuWX3diqYENkWsIL0XggGG",
   TONAPI_KEY: "key",

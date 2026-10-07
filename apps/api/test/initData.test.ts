@@ -2,7 +2,7 @@ import { createHmac } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { InitDataError, signInitData, validateInitData, type TgUser } from "../src/auth/initData";
 
-const TOKEN = "123456789:AAH_unit_test_token_0123456789abcd";
+const TOKEN = "123456789:AAH_FAKE_fixture_not_a_real_bot_token_0123456789";
 const NOW = Date.UTC(2026, 9, 7, 12, 0, 0);
 const nowSec = NOW / 1000;
 const user: TgUser = { id: 777, first_name: "Ann", username: "ann", language_code: "ru" };
@@ -60,7 +60,7 @@ describe("validateInitData", () => {
   });
 
   it("rejects a different bot token", () => {
-    reject(sign(base(), "987654321:AAH_other_bot_token_0123456789abcde"), /bad hash/);
+    reject(sign(base(), "987654321:AAH_FAKE_other_fixture_not_a_real_bot_token_012"), /bad hash/);
   });
 
   it("rejects any tampering after signing", () => {

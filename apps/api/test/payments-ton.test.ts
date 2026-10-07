@@ -1180,7 +1180,7 @@ describe("TON startup self-check", () => {
   const prod = (env: Record<string, string> = {}) =>
     loadConfig({
       NODE_ENV: "production",
-      BOT_TOKEN: "123456789:AAH_test_token_for_unit_tests_01234",
+      BOT_TOKEN: "123456789:AAH_FAKE_fixture_not_a_real_bot_token_0123456789",
       BOT_USERNAME: "b",
       TONAPI_KEY: "k",
       TONCONNECT_MANIFEST_URL: "https://x/m.json",
