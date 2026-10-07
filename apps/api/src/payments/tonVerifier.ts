@@ -52,6 +52,7 @@ export function matchEvent(
 export type ProcessResult =
   | { txHash: string; reference: string; status: "paid"; late: boolean }
   | { txHash: string; reference: string; status: "already_paid" }
+  | { txHash: string; reference: string; status: "paid_no_boost"; reason: string }
   | { txHash: string; reference: string | null; status: "ignored"; reason: string };
 
 interface Logger {
@@ -142,7 +143,15 @@ export class TonVerifier {
         results.push({ txHash: ev.txHash, reference, status: "paid", late: m.late });
       else if (res.outcome === "already_paid")
         results.push({ txHash: ev.txHash, reference, status: "already_paid" });
-      else {
+      else if (res.outcome === "paid_no_boost") {
+        // The money arrived but the chain can no longer be boosted: the order is `paid` (noted in rawJson)
+        // and NO boost exists. Needs a manual refund (scripts/refund.ts is for Stars; refund GRM by hand).
+        this.log.warn(
+          { reference, txHash: ev.txHash, reason: res.reason },
+          "GRM payment received but no boost granted: manual refund needed",
+        );
+        results.push({ txHash: ev.txHash, reference, status: "paid_no_boost", reason: res.reason });
+      } else {
         this.log.warn({ reference, txHash: ev.txHash, reason: res.reason }, "settle rejected");
         ignore(res.reason);
       }

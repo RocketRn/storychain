@@ -4,7 +4,6 @@ import type { Transaction } from "@prisma/client";
 import {
   allowedMethods,
   createPaymentSchema,
-  PLANS,
   tonConfirmSchema,
   type PaymentStatusDTO,
   type StarsInvoiceDTO,
@@ -16,7 +15,8 @@ import { errors } from "../errors";
 import { rawAddress } from "../payments/address";
 import { createPending } from "../payments/ledger";
 import { createStarsInvoice, invoiceLinkCreator } from "../payments/stars";
-import { isPro } from "../services/users";
+import { isBoostActive } from "../boosts/core";
+import { validateBoostPurchase } from "../boosts/purchase";
 
 const TON_INTENT_TTL_MS = 30 * 60 * 1000;
 /** 0.01 TON forwarded so the merchant wallet gets a transfer notification carrying the comment */
@@ -32,8 +32,9 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Deps): void {
   const walletCache = new Map<string, { value: string; expires: number }>();
 
   async function statusDto(tx: Transaction): Promise<PaymentStatusDTO> {
-    const u = await db.user.findUniqueOrThrow({ where: { id: tx.userId } });
-    const expiredNow = tx.status === "pending" && tx.expiresAt.getTime() < Date.now();
+    const chain = tx.chainId ? await db.chain.findUnique({ where: { id: tx.chainId } }) : null;
+    const t = deps.now?.() ?? new Date();
+    const expiredNow = tx.status === "pending" && tx.expiresAt.getTime() < t.getTime();
     return {
       reference: tx.reference,
       provider: tx.provider,
@@ -43,8 +44,10 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Deps): void {
       currency: tx.currency,
       expiresAt: tx.expiresAt.toISOString(),
       paidAt: tx.paidAt?.toISOString() ?? null,
-      isPro: isPro(u),
-      proUntil: u.proUntil?.toISOString() ?? null,
+      chainId: tx.chainId,
+      // only the buyer (= the creator) can read their own order
+      boostedUntil:
+        chain && isBoostActive(chain, t) ? (chain.boostedUntil as Date).toISOString() : null,
     };
   }
 
@@ -59,13 +62,15 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Deps): void {
     "/api/payments/stars/invoice",
     { preHandler: requireAuth, config: limit },
     async (req): Promise<StarsInvoiceDTO> => {
-      const { planId } = createPaymentSchema.parse(req.body);
+      const { chainId, planId } = createPaymentSchema.parse(req.body);
       return createStarsInvoice({
         db,
         config,
         create: deps.createInvoiceLink ?? invoiceLinkCreator(deps.bot, config),
         user: user(req),
+        chainId,
         planId,
+        now: deps.now?.() ?? new Date(),
       });
     },
   );
@@ -74,24 +79,32 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Deps): void {
     "/api/payments/ton/intent",
     { preHandler: requireAuth, config: limit },
     async (req): Promise<TonIntentDTO> => {
-      const { planId } = createPaymentSchema.parse(req.body);
+      const { chainId, planId } = createPaymentSchema.parse(req.body);
       if (!allowedMethods(req.platform, config.ton.allPlatforms).includes("ton_grm"))
         throw errors.methodNotAllowed();
       // Mock/dev mode needs no merchant address; real mode must have one (enforced at startup in production)
       if (!config.ton.merchantAddress && !config.devMode)
         throw errors.methodUnavailable("TON payments are not configured");
-      if (!PLANS[planId]) throw errors.badRequest("Unknown plan");
+      const purchase = await validateBoostPurchase(db, config, {
+        chainId,
+        planId,
+        userId: user(req).id,
+        now: deps.now?.() ?? new Date(),
+      });
       const expiresAt = new Date(Date.now() + TON_INTENT_TTL_MS);
       const tx = await createPending(db, {
         userId: user(req).id,
         provider: "ton_grm",
-        planId,
-        amount: config.ton.priceUnits.toString(),
+        planId: purchase.planId,
+        chainId: purchase.chain.id,
+        amount: config.boost.grmUnits[purchase.planId].toString(),
         currency: "GRM",
         expiresAt,
       });
       return {
         reference: tx.reference,
+        chainId: purchase.chain.id,
+        planId: purchase.planId,
         jettonMaster: config.ton.jettonMaster,
         merchantAddress: config.ton.merchantAddress,
         amount: tx.amount,

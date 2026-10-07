@@ -1,5 +1,5 @@
 /**
- * Admin script: refund a Telegram Stars payment and revoke the PRO period it granted.
+ * Admin script: refund a Telegram Stars payment and take back the marathon boost it bought.
  *   pnpm --filter @storychain/api refund <reference | telegram_payment_charge_id>
  * Needs BOT_TOKEN and DATABASE_URL (same .env as the API). Safe to re-run (idempotent).
  */
@@ -31,7 +31,7 @@ if (tx.provider !== "stars" || !tx.externalId) {
   process.exit(1);
 }
 if (tx.status === "paid") {
-  // Refund at Telegram first; only then revoke locally (a Bot API failure leaves PRO untouched)
+  // Refund at Telegram first; only then revoke locally (a Bot API failure leaves the boost untouched)
   await new Bot(config.botToken).api.refundStarPayment(Number(tx.user.telegramId), tx.externalId);
 }
 const res = await refundPayment(db, { reference: tx.reference });

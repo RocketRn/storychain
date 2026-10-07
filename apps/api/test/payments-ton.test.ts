@@ -12,7 +12,7 @@ import {
 } from "../src/payments/tonIndexer";
 import { CLOCK_SKEW_MS, LATE_GRACE_MS, matchEvent, TonVerifier } from "../src/payments/tonVerifier";
 import { runTonStartupCheck } from "../src/payments/tonStartupCheck";
-import { authHeader, createCtx, newTgId, type TestCtx } from "./helpers";
+import { authHeader, createChain, createCtx, newTgId, type TestCtx } from "./helpers";
 
 const MASTER = new Address(0, Buffer.alloc(32, 7));
 const OTHER_MASTER = new Address(0, Buffer.alloc(32, 8));
@@ -57,7 +57,8 @@ beforeAll(async () => {
     {
       TON_MERCHANT_ADDRESS: cfg.merchantAddress,
       GRM_JETTON_MASTER: cfg.jettonMaster,
-      GRM_PRO_30D_PRICE: "100",
+      GRM_BOOST_24H_PRICE: "100",
+      GRM_BOOST_7D_PRICE: "500",
     },
     {},
   );
@@ -80,10 +81,12 @@ async function pendingTx(
   const tgId = newTgId();
   await ctx.app.inject({ url: "/api/me", headers: authHeader(tgId) });
   const user = await ctx.db.user.findUniqueOrThrow({ where: { telegramId: BigInt(tgId) } });
+  const chainId = await createChain(ctx, tgId);
   const tx = await createPending(ctx.db, {
     userId: user.id,
     provider: "ton_grm",
-    planId: "pro_30d",
+    planId: "boost_24h",
+    chainId,
     amount: (opts.amount ?? PRICE).toString(),
     currency: "GRM",
     expiresAt: opts.expiresAt ?? new Date(nowMs + 30 * 60_000),
@@ -97,7 +100,12 @@ async function pendingTx(
       },
     });
   }
-  return { tgId, user, tx: await ctx.db.transaction.findUniqueOrThrow({ where: { id: tx.id } }) };
+  return {
+    tgId,
+    user,
+    chainId,
+    tx: await ctx.db.transaction.findUniqueOrThrow({ where: { id: tx.id } }),
+  };
 }
 
 let hashN = 0;
@@ -115,7 +123,7 @@ const ev = (
   ...over,
 });
 
-const userOf = (id: string) => ctx.db.user.findUniqueOrThrow({ where: { id } });
+const chainOf = (id: string) => ctx.db.chain.findUniqueOrThrow({ where: { id } });
 const txOf = (id: string) => ctx.db.transaction.findUniqueOrThrow({ where: { id } });
 
 describe("raw address comparison", () => {
@@ -135,17 +143,61 @@ describe("raw address comparison", () => {
 });
 
 describe("TonVerifier.processEvents", () => {
-  it("matches by comment == reference and grants PRO exactly once (idempotent)", async () => {
-    const { tx, user } = await pendingTx();
+  it("matches by comment == reference and boosts the chain exactly once (idempotent)", async () => {
+    const { tx, chainId } = await pendingTx();
     const e = ev(tx.reference);
     const r1 = await verifier.processEvents([e]);
     expect(r1[0]).toMatchObject({ status: "paid", reference: tx.reference, late: false });
     const paid = await txOf(tx.id);
     expect(paid).toMatchObject({ status: "paid", externalId: e.txHash });
-    expect((await userOf(user.id)).proUntil!.getTime()).toBeGreaterThan(nowMs + 29 * 86_400_000);
+    const boosted = await chainOf(chainId);
+    expect(boosted.isBoosted).toBe(true);
+    expect(boosted.boostedUntil).toEqual(new Date(nowMs + 24 * 3_600_000));
     const again = await verifier.processEvents([e, e]);
     expect(again.every((r) => r.status === "already_paid")).toBe(true);
-    expect(await ctx.db.subscription.count({ where: { txId: tx.id } })).toBe(1);
+    expect(await ctx.db.chainBoost.count({ where: { txId: tx.id } })).toBe(1);
+  });
+
+  it("7-day order boosts for 7 days; a second paid order stacks from the current end", async () => {
+    const a = await pendingTx();
+    await ctx.db.transaction.update({ where: { id: a.tx.id }, data: { planId: "boost_7d" } });
+    await verifier.processEvents([ev(a.tx.reference)]);
+    expect((await chainOf(a.chainId)).boostedUntil).toEqual(new Date(nowMs + 7 * 86_400_000));
+    const second = await createPending(ctx.db, {
+      userId: a.user.id,
+      provider: "ton_grm",
+      planId: "boost_24h",
+      chainId: a.chainId,
+      amount: PRICE.toString(),
+      currency: "GRM",
+      expiresAt: new Date(nowMs + 30 * 60_000),
+    });
+    await verifier.processEvents([ev(second.reference)]);
+    expect((await chainOf(a.chainId)).boostedUntil).toEqual(new Date(nowMs + 8 * 86_400_000));
+  });
+
+  it("chain hidden after payment: order is paid, NO boost, a warning asks for a manual refund", async () => {
+    const warnings: string[] = [];
+    const warnVerifier = new TonVerifier({
+      db: ctx.db,
+      indexer,
+      config: cfg,
+      now: () => new Date(nowMs),
+      logger: { ...quiet, warn: (_o, m) => void warnings.push(String(m)) },
+    });
+    const { tx, chainId } = await pendingTx();
+    await ctx.db.chain.update({ where: { id: chainId }, data: { isHidden: true } });
+    const e = ev(tx.reference);
+    const r = await warnVerifier.processEvents([e]);
+    expect(r[0]).toMatchObject({ status: "paid_no_boost", reason: "chain_not_boostable" });
+    const paid = await txOf(tx.id);
+    expect(paid.status).toBe("paid");
+    expect(JSON.parse(paid.rawJson as string).note).toBe("chain_not_boostable");
+    expect(await ctx.db.chainBoost.count({ where: { chainId } })).toBe(0);
+    expect((await chainOf(chainId)).boostedUntil).toBeNull();
+    expect(warnings.some((w) => w.includes("manual refund"))).toBe(true);
+    // the same transfer seen on the next poll is a no-op
+    expect((await warnVerifier.processEvents([e]))[0]?.status).toBe("already_paid");
   });
 
   it("matches when master / merchant arrive in a different (non-bounceable / raw) spelling", async () => {
@@ -161,10 +213,11 @@ describe("TonVerifier.processEvents", () => {
 
   it("accepts overpayment but leaves an underpayment pending", async () => {
     const low = await pendingTx();
+    const lowChain = low.chainId;
     const r = await verifier.processEvents([ev(low.tx.reference, { amount: PRICE - 1n })]);
     expect(r[0]).toMatchObject({ status: "ignored", reason: "amount_too_low" });
     expect((await txOf(low.tx.id)).status).toBe("pending");
-    expect((await userOf(low.user.id)).proUntil).toBeNull();
+    expect((await chainOf(lowChain)).boostedUntil).toBeNull();
     // the user tops up with a second sufficient transfer using the same reference
     expect(
       (await verifier.processEvents([ev(low.tx.reference, { amount: PRICE * 2n })]))[0]?.status,
@@ -172,7 +225,7 @@ describe("TonVerifier.processEvents", () => {
   });
 
   it("ignores the wrong jetton, wrong recipient and failed transfers", async () => {
-    const { tx, user } = await pendingTx();
+    const { tx, chainId } = await pendingTx();
     const rs = await verifier.processEvents([
       ev(tx.reference, { jettonMaster: OTHER_MASTER.toString() }),
       ev(tx.reference, { recipient: OTHER.toString() }),
@@ -184,7 +237,7 @@ describe("TonVerifier.processEvents", () => {
       "failed",
     ]);
     expect((await txOf(tx.id)).status).toBe("pending");
-    expect((await userOf(user.id)).proUntil).toBeNull();
+    expect((await chainOf(chainId)).boostedUntil).toBeNull();
   });
 
   it("rejects a replay of the same on-chain transfer for another reference", async () => {
@@ -204,7 +257,8 @@ describe("TonVerifier.processEvents", () => {
     const stars = await createPending(ctx.db, {
       userId: user.id,
       provider: "stars",
-      planId: "pro_30d",
+      planId: "boost_24h",
+      chainId: await createChain(ctx, tgId),
       amount: "150",
       currency: "XTR",
       expiresAt: new Date(nowMs + 3600_000),
@@ -342,12 +396,12 @@ describe("TonVerifier.tick (polling job)", () => {
 });
 
 describe("TON HTTP endpoints", () => {
-  const intent = (tgId: number, platform = "tdesktop") =>
+  const intent = async (tgId: number, platform = "tdesktop", over: Record<string, unknown> = {}) =>
     ctx.app.inject({
       method: "POST",
       url: "/api/payments/ton/intent",
       headers: { ...authHeader(tgId), "x-tg-platform": platform },
-      payload: { planId: "pro_30d" },
+      payload: { chainId: await createChain(ctx, tgId), planId: "boost_24h", ...over },
     });
 
   it("intent returns everything needed for the Jetton transfer", async () => {
@@ -356,6 +410,7 @@ describe("TON HTTP endpoints", () => {
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body).toMatchObject({
+      planId: "boost_24h",
       jettonMaster: cfg.jettonMaster,
       merchantAddress: cfg.merchantAddress,
       amount: "100000000000",
@@ -373,7 +428,66 @@ describe("TON HTTP endpoints", () => {
       status: "pending",
       amount: "100000000000",
       currency: "GRM",
+      chainId: body.chainId,
     });
+  });
+
+  it("the 7-day plan costs its own GRM price (bigint math, no floats)", async () => {
+    const res = await intent(newTgId(), "tdesktop", { planId: "boost_7d" });
+    expect(res.json()).toMatchObject({ planId: "boost_7d", amount: "500000000000" });
+  });
+
+  it("GRM prices come from env and keep fractional amounts exact", async () => {
+    const frac = await createCtx({
+      TON_MERCHANT_ADDRESS: cfg.merchantAddress,
+      GRM_BOOST_24H_PRICE: "0.5",
+      GRM_BOOST_7D_PRICE: "12.000000001",
+    });
+    const tgId = newTgId();
+    const chainId = await createChain(frac, tgId);
+    const r = await frac.app.inject({
+      method: "POST",
+      url: "/api/payments/ton/intent",
+      headers: authHeader(tgId),
+      payload: { chainId, planId: "boost_7d" },
+    });
+    expect(r.json().amount).toBe("12000000001");
+    const r2 = await frac.app.inject({
+      method: "POST",
+      url: "/api/payments/ton/intent",
+      headers: authHeader(tgId),
+      payload: { chainId, planId: "boost_24h" },
+    });
+    expect(r2.json().amount).toBe("500000000");
+    await frac.app.close();
+  });
+
+  it("validates like Stars: plan, creator, hidden chain, missing chain, horizon", async () => {
+    const tgId = newTgId();
+    const other = newTgId();
+    const chainId = await createChain(ctx, tgId);
+    await ctx.app.inject({ url: "/api/me", headers: authHeader(other) });
+    const post = (id: number, body: Record<string, unknown>) =>
+      ctx.app.inject({
+        method: "POST",
+        url: "/api/payments/ton/intent",
+        headers: authHeader(id),
+        payload: body,
+      });
+    const code = async (r: ReturnType<typeof post>) => (await r).json().error?.code;
+    expect(await code(post(tgId, { chainId, planId: "gold" }))).toBe("INVALID_BOOST_PLAN");
+    expect(await code(post(tgId, { chainId: "nope1234", planId: "boost_24h" }))).toBe(
+      "CHAIN_NOT_FOUND",
+    );
+    expect(await code(post(other, { chainId, planId: "boost_24h" }))).toBe("FORBIDDEN");
+    await ctx.db.chain.update({
+      where: { id: chainId },
+      data: { boostedUntil: new Date(Date.now() - 1000 + 29 * 24 * 3_600_000) },
+    });
+    expect(await code(post(tgId, { chainId, planId: "boost_24h" }))).toBeUndefined();
+    expect(await code(post(tgId, { chainId, planId: "boost_7d" }))).toBe("BOOST_HORIZON_EXCEEDED");
+    await ctx.db.chain.update({ where: { id: chainId }, data: { isHidden: true } });
+    expect(await code(post(tgId, { chainId, planId: "boost_24h" }))).toBe("CHAIN_NOT_BOOSTABLE");
   });
 
   it("platform policy: not on iOS/Android unless TON_PAYMENTS_ALL_PLATFORMS=true", async () => {
@@ -392,7 +506,7 @@ describe("TON HTTP endpoints", () => {
       method: "POST",
       url: "/api/payments/ton/intent",
       headers: { ...authHeader(tgId), "x-tg-platform": "ios" },
-      payload: { planId: "pro_30d" },
+      payload: { chainId: await createChain(open, tgId), planId: "boost_24h" },
     });
     expect(ok.statusCode).toBe(200);
     await open.app.close();
@@ -405,7 +519,7 @@ describe("TON HTTP endpoints", () => {
       method: "POST",
       url: "/api/payments/ton/intent",
       headers: authHeader(tgId),
-      payload: { planId: "pro_30d" },
+      payload: { chainId: "abc12345", planId: "boost_24h" },
     });
     expect(r.statusCode).toBe(503);
     await real.app.close();
@@ -414,7 +528,7 @@ describe("TON HTTP endpoints", () => {
       method: "POST",
       url: "/api/payments/ton/intent",
       headers: authHeader(tgId),
-      payload: { planId: "pro_30d" },
+      payload: { chainId: await createChain(mock, tgId), planId: "boost_24h" },
     });
     expect(m.statusCode).toBe(200);
     expect(m.json().merchantAddress).toBe("");
@@ -432,7 +546,7 @@ describe("TON HTTP endpoints", () => {
         method: "POST",
         url: "/api/payments/ton/intent",
         headers: authHeader(tgId),
-        payload: { planId: "pro_30d" },
+        payload: { chainId: await createChain(confirmCtx, tgId), planId: "boost_24h" },
       })
     ).json();
     const confirm = (id: number, reference: string) =>
@@ -446,11 +560,13 @@ describe("TON HTTP endpoints", () => {
     indexer.events = [];
     expect((await confirm(tgId, it1.reference)).json()).toMatchObject({
       status: "pending",
-      isPro: false,
+      boostedUntil: null,
+      chainId: it1.chainId,
     });
     indexer.events = [ev(it1.reference)];
     const paid = (await confirm(tgId, it1.reference)).json();
-    expect(paid).toMatchObject({ status: "paid", isPro: true, provider: "ton_grm" });
+    expect(paid).toMatchObject({ status: "paid", provider: "ton_grm", chainId: it1.chainId });
+    expect(new Date(paid.boostedUntil).getTime()).toBeGreaterThan(Date.now() + 23 * 3_600_000);
     expect(
       (
         await confirmCtx.app.inject({
@@ -466,7 +582,7 @@ describe("TON HTTP endpoints", () => {
     await confirmCtx.app.close();
   });
 
-  it("dev completion grants PRO for a TON intent (mock mode path)", async () => {
+  it("dev completion boosts the chain for a TON intent (mock mode path)", async () => {
     const mock = await createCtx();
     const tgId = newTgId();
     const i = (
@@ -474,7 +590,7 @@ describe("TON HTTP endpoints", () => {
         method: "POST",
         url: "/api/payments/ton/intent",
         headers: authHeader(tgId),
-        payload: { planId: "pro_30d" },
+        payload: { chainId: await createChain(mock, tgId), planId: "boost_24h" },
       })
     ).json();
     expect(
@@ -482,9 +598,9 @@ describe("TON HTTP endpoints", () => {
         await mock.app.inject({ method: "POST", url: `/api/dev/payments/${i.reference}/complete` })
       ).json(),
     ).toEqual({ outcome: "paid" });
-    expect(
-      (await mock.app.inject({ url: "/api/me", headers: authHeader(tgId) })).json(),
-    ).toMatchObject({ isPro: true, dailyLimit: null });
+    const row = await mock.db.chain.findUniqueOrThrow({ where: { id: i.chainId } });
+    expect(row.isBoosted).toBe(true);
+    expect(row.boostedUntil!.getTime()).toBeGreaterThan(Date.now() + 23 * 3_600_000);
     await mock.app.close();
   });
 

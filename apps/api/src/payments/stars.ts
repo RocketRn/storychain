@@ -1,12 +1,17 @@
 import type { Bot } from "grammy";
-import { PLANS } from "@storychain/shared";
+import type { BoostPlanId } from "@storychain/shared";
 import type { User } from "@prisma/client";
+import { assertBoostHorizon } from "../boosts/core";
+import { parsePlan, validateBoostPurchase } from "../boosts/purchase";
 import type { Config } from "../config";
 import type { Db } from "../db";
-import { errors } from "../errors";
+import { AppError, errors } from "../errors";
 import { createPending, refundPayment, settlePayment, type SettleResult } from "./ledger";
 
 const STARS_INVOICE_TTL_MS = 60 * 60 * 1000;
+/** Telegram limits: title 1-32 chars, description 1-255 chars */
+const TITLE_MAX = 32;
+const DESCRIPTION_MAX = 255;
 
 export interface InvoiceLinkArgs {
   title: string;
@@ -31,37 +36,67 @@ export function invoiceLinkCreator(
   return undefined;
 }
 
+const truncate = (s: string, max: number): string =>
+  [...s].length <= max
+    ? s
+    : `${[...s]
+        .slice(0, Math.max(0, max - 1))
+        .join("")
+        .trimEnd()}…`;
+
+const duration = (planId: BoostPlanId, ru: boolean): string =>
+  planId === "boost_24h" ? (ru ? "24 ч" : "24h") : ru ? "7 дн" : "7d";
+
+/** `Boost "<chain title>" — 24h`, the chain title shortened so the whole title fits Telegram's 32 chars. */
+export function invoiceTitle(chainTitle: string, planId: BoostPlanId, ru: boolean): string {
+  const [open, close] = ru ? ["Буст «", "»"] : ['Boost "', '"'];
+  const tail = `${close} — ${duration(planId, ru)}`;
+  const room = TITLE_MAX - [...open].length - [...tail].length;
+  return `${open}${truncate(chainTitle, Math.max(1, room))}${tail}`;
+}
+
+export function invoiceDescription(chainTitle: string, planId: BoostPlanId, ru: boolean): string {
+  const text = ru
+    ? `Марафон «${chainTitle}» будет закреплён в карусели «Горячие марафоны» на ${duration(planId, ru)}.`
+    : `The marathon "${chainTitle}" will be pinned to the Hot Marathons carousel for ${duration(planId, ru)}.`;
+  return truncate(text, DESCRIPTION_MAX);
+}
+
 export async function createStarsInvoice(args: {
   db: Db;
   config: Config;
   create: CreateInvoiceLink | undefined;
   user: User;
+  chainId: string;
   planId: string;
-}): Promise<{ invoiceUrl: string; reference: string }> {
-  const plan = PLANS[args.planId];
-  if (!plan) throw errors.badRequest("Unknown plan");
+  now?: Date;
+}): Promise<{ invoiceUrl: string; reference: string; chainId: string; planId: string }> {
+  const { chain, planId } = await validateBoostPurchase(args.db, args.config, {
+    chainId: args.chainId,
+    planId: args.planId,
+    userId: args.user.id,
+    now: args.now ?? new Date(),
+  });
   if (!args.create) throw errors.methodUnavailable();
   const ru = !args.user.languageCode?.toLowerCase().startsWith("en");
+  const amount = args.config.boost.starsPrice[planId];
   const tx = await createPending(args.db, {
     userId: args.user.id,
     provider: "stars",
-    planId: plan.id,
-    amount: String(plan.starsPrice),
+    planId,
+    chainId: chain.id,
+    amount: String(amount),
     currency: "XTR",
     expiresAt: new Date(Date.now() + STARS_INVOICE_TTL_MS),
   });
   const invoiceUrl = await args.create({
-    title: ru
-      ? `StoryChain PRO — ${plan.durationDays} дней`
-      : `StoryChain PRO — ${plan.durationDays} days`,
-    description: ru
-      ? "Без лимита публикаций и водяного знака, премиум-шаблоны и шрифты."
-      : "No publication limit or watermark, premium templates and fonts.",
+    title: invoiceTitle(chain.title, planId, ru),
+    description: invoiceDescription(chain.title, planId, ru),
     payload: tx.reference,
     currency: "XTR",
-    prices: [{ label: "PRO", amount: plan.starsPrice }],
+    prices: [{ label: duration(planId, ru), amount }],
   });
-  return { invoiceUrl, reference: tx.reference };
+  return { invoiceUrl, reference: tx.reference, chainId: chain.id, planId };
 }
 
 export interface PreCheckout {
@@ -73,15 +108,19 @@ export interface PreCheckout {
 
 export type PreCheckoutVerdict = { ok: true } | { ok: false; message: string };
 
-/** pre_checkout_query must be answered within 10 s: one indexed lookup, no network. */
+/**
+ * pre_checkout_query must be answered within 10 s: a couple of indexed lookups, no network.
+ * Besides the order itself, the chain must still exist, be visible and still be boostable (horizon).
+ */
 export async function validatePreCheckout(
   db: Db,
+  config: Pick<Config, "boost">,
   q: PreCheckout,
   now = new Date(),
 ): Promise<PreCheckoutVerdict> {
   const tx = await db.transaction.findUnique({
     where: { reference: q.invoice_payload },
-    include: { user: true },
+    include: { user: true, chain: true },
   });
   if (!tx || tx.provider !== "stars") return { ok: false, message: "Unknown order" };
   if (tx.status !== "pending") return { ok: false, message: "This order is no longer payable" };
@@ -90,6 +129,21 @@ export async function validatePreCheckout(
     return { ok: false, message: "Price mismatch" };
   if (tx.user.telegramId !== BigInt(q.from.id))
     return { ok: false, message: "This order belongs to another user" };
+  let planId: BoostPlanId;
+  try {
+    planId = parsePlan(tx.planId);
+  } catch {
+    return { ok: false, message: "Unknown plan" };
+  }
+  if (!tx.chain) return { ok: false, message: "This marathon no longer exists" };
+  if (tx.chain.isHidden) return { ok: false, message: "This marathon cannot be boosted" };
+  try {
+    assertBoostHorizon(tx.chain, planId, now, config.boost.maxHorizonMs);
+  } catch (e) {
+    if (e instanceof AppError)
+      return { ok: false, message: "This marathon is already boosted far enough ahead" };
+    throw e;
+  }
   return { ok: true };
 }
 
@@ -138,26 +192,46 @@ export async function handleSuccessfulPayment(
   });
 }
 
+const dateOf = (d: Date, ru: boolean): string =>
+  d.toISOString().slice(0, 16).replace("T", " ") + (ru ? " UTC" : " UTC");
+
 export function registerPaymentHandlers(bot: Bot, deps: { db: Db; config: Config }): void {
-  const { db } = deps;
+  const { db, config } = deps;
 
   bot.on("pre_checkout_query", async (ctx) => {
-    const verdict = await validatePreCheckout(db, ctx.preCheckoutQuery).catch((e: unknown) => {
-      console.error("[payments] pre_checkout error", e);
-      return { ok: false, message: "Temporary error, please try again" } as const;
-    });
+    const verdict = await validatePreCheckout(db, config, ctx.preCheckoutQuery).catch(
+      (e: unknown) => {
+        console.error("[payments] pre_checkout error", e);
+        return { ok: false, message: "Temporary error, please try again" } as const;
+      },
+    );
     if (verdict.ok) await ctx.answerPreCheckoutQuery(true);
     else await ctx.answerPreCheckoutQuery(false, { error_message: verdict.message });
   });
 
   bot.on("message:successful_payment", async (ctx) => {
     const res = await handleSuccessfulPayment(db, ctx.from.id, ctx.message.successful_payment);
-    if (res.outcome === "paid") {
-      const ru = !ctx.from.language_code?.toLowerCase().startsWith("en");
-      const until = res.proUntil.toISOString().slice(0, 10);
-      await ctx.reply(
-        ru ? `⭐ PRO активен до ${until}. Спасибо!` : `⭐ PRO is active until ${until}. Thank you!`,
-      );
+    const ru = !ctx.from.language_code?.toLowerCase().startsWith("en");
+    // The grant is already committed; notification is best effort and must never undo or fail it.
+    try {
+      if (res.outcome === "paid") {
+        const chain = await db.chain.findUnique({ where: { id: res.chainId } });
+        const title = chain?.title ?? "";
+        const until = dateOf(res.boostedUntil, ru);
+        await ctx.reply(
+          ru
+            ? `🔥 Ваш марафон «${title}» продвигается до ${until}.`
+            : `🔥 Your marathon «${title}» is boosted until ${until}.`,
+        );
+      } else if (res.outcome === "paid_no_boost") {
+        await ctx.reply(
+          ru
+            ? "Платёж получен, но марафон больше недоступен для продвижения. Мы вернём оплату."
+            : "Payment received, but the marathon can no longer be boosted. We will refund you.",
+        );
+      }
+    } catch (e) {
+      console.warn("[payments] could not send the boost notification", (e as Error).message);
     }
   });
 

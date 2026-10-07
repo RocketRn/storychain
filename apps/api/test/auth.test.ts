@@ -16,7 +16,7 @@ describe("auth", () => {
     expect(res.statusCode).toBe(200);
   });
 
-  it("session upserts the user and returns usage", async () => {
+  it("session upserts the user", async () => {
     const id = newTgId();
     const res = await ctx.app.inject({
       method: "POST",
@@ -27,7 +27,8 @@ describe("auth", () => {
     const body = res.json();
     expect(body.user.telegramId).toBe(String(id));
     expect(body.user.isTgPremium).toBe(true);
-    expect(body).toMatchObject({ isPro: false, dailyLimit: 3, usedToday: 0 });
+    // no quota / plan fields exist any more: posting is free and unlimited
+    expect(Object.keys(body)).toEqual(["user"]);
   });
 
   it("refreshes isTgPremium on each auth", async () => {

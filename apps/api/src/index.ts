@@ -3,6 +3,7 @@ import { buildApp } from "./app";
 import { createDb } from "./db";
 import { createStorage } from "./storage";
 import { createBot } from "./bot";
+import { startBoostSweeper } from "./boosts";
 import { TonApiIndexer } from "./payments/tonIndexer";
 import { TonVerifier } from "./payments/tonVerifier";
 import { runTonStartupCheck, tonPaymentsEnabled } from "./payments/tonStartupCheck";
@@ -38,6 +39,9 @@ const app = await buildApp({
 });
 await app.listen({ port: config.port, host: "0.0.0.0" });
 verifier?.start(10_000);
+// housekeeping only: boost correctness never depends on this job (everything reads boostedUntil > now)
+const sweeper = startBoostSweeper(db);
+for (const sig of ["SIGINT", "SIGTERM"] as const) process.once(sig, () => sweeper.stop());
 
 if (bot) {
   await bot.init();

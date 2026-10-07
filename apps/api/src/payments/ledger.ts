@@ -1,8 +1,7 @@
 import { customAlphabet } from "nanoid";
-import { PLANS } from "@storychain/shared";
 import type { Transaction } from "@prisma/client";
+import { applyBoost, revokeBoost } from "../boosts/core";
 import { withRetry, type Db } from "../db";
-import { extendProUntil, shrinkProUntil } from "../services/pro";
 
 const newReference = customAlphabet(
   "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ",
@@ -17,6 +16,8 @@ export async function createPending(
     userId: string;
     provider: Provider;
     planId: string;
+    /** the chain this purchase boosts */
+    chainId: string;
     amount: string;
     currency: string;
     expiresAt: Date;
@@ -28,14 +29,15 @@ export async function createPending(
 }
 
 export type SettleResult =
-  | { outcome: "paid"; tx: Transaction; proUntil: Date }
+  | { outcome: "paid"; tx: Transaction; chainId: string; boostedUntil: Date }
   | { outcome: "already_paid"; tx: Transaction }
+  /** money received, nothing granted (chain hidden/deleted meanwhile): needs a manual refund */
+  | { outcome: "paid_no_boost"; tx: Transaction; reason: "chain_not_boostable" | "unknown_plan" }
   | { outcome: "rejected"; reason: "not_found" | "bad_state" | "replay" };
 
 /**
- * Idempotently marks a transaction paid and grants PRO, all in ONE DB transaction:
- * claim (conditional update pending|expired -> paid) + extend proUntil + Subscription row.
- * `externalId` (telegram charge id / TON tx hash) is unique: a replay on another reference is rejected.
+ * Idempotently marks an order paid and applies its boost, all in ONE DB transaction (see `applyBoost`).
+ * `externalId` (Telegram charge id / TON event id) is unique: a replay on another order is rejected.
  */
 export async function settlePayment(
   db: Db,
@@ -47,57 +49,44 @@ export async function settlePayment(
     allowExpired?: boolean;
   },
 ): Promise<SettleResult> {
-  const now = args.now ?? new Date();
   return withRetry(() =>
     db.$transaction(async (tx): Promise<SettleResult> => {
       const row = await tx.transaction.findUnique({ where: { reference: args.reference } });
       if (!row) return { outcome: "rejected", reason: "not_found" };
-      if (row.status === "paid") return { outcome: "already_paid", tx: row };
-      if (row.status === "refunded" || row.status === "failed")
-        return { outcome: "rejected", reason: "bad_state" };
-      if (row.status === "expired" && !args.allowExpired)
-        return { outcome: "rejected", reason: "bad_state" };
-
-      const used = await tx.transaction.findUnique({ where: { externalId: args.externalId } });
-      if (used && used.id !== row.id) return { outcome: "rejected", reason: "replay" };
-
-      const claim = await tx.transaction.updateMany({
-        where: { id: row.id, status: { in: ["pending", "expired"] } },
-        data: {
-          status: "paid",
-          externalId: args.externalId,
-          paidAt: now,
-          rawJson: args.rawJson === undefined ? null : JSON.stringify(args.rawJson),
-        },
+      const res = await applyBoost(tx, {
+        transactionId: row.id,
+        externalId: args.externalId,
+        rawJson: args.rawJson,
+        ...(args.now ? { now: args.now } : {}),
+        ...(args.allowExpired ? { allowExpired: args.allowExpired } : {}),
       });
-      if (claim.count === 0) {
-        const fresh = await tx.transaction.findUniqueOrThrow({ where: { id: row.id } });
-        return { outcome: "already_paid", tx: fresh };
+      const fresh = () => tx.transaction.findUniqueOrThrow({ where: { id: row.id } });
+      switch (res.outcome) {
+        case "applied":
+          return {
+            outcome: "paid",
+            tx: await fresh(),
+            chainId: res.boost.chainId,
+            boostedUntil: res.boostedUntil,
+          };
+        case "already_applied":
+          return { outcome: "already_paid", tx: await fresh() };
+        case "paid_no_boost":
+          return res.reason === "already_settled"
+            ? { outcome: "already_paid", tx: await fresh() }
+            : { outcome: "paid_no_boost", tx: await fresh(), reason: res.reason };
+        case "rejected":
+          return res;
       }
-
-      const plan = PLANS[row.planId];
-      if (!plan) throw new Error(`Unknown plan on transaction ${row.id}: ${row.planId}`);
-      const user = await tx.user.findUniqueOrThrow({ where: { id: row.userId } });
-      const proUntil = extendProUntil(now, user.proUntil, plan.durationDays);
-      const startsAt = user.proUntil && user.proUntil > now ? user.proUntil : now;
-      await tx.user.update({ where: { id: user.id }, data: { proUntil } });
-      await tx.subscription.create({
-        data: { userId: user.id, planId: row.planId, startsAt, endsAt: proUntil, txId: row.id },
-      });
-      return {
-        outcome: "paid",
-        tx: { ...row, status: "paid", externalId: args.externalId, paidAt: now },
-        proUntil,
-      };
     }),
   );
 }
 
 export type RefundResult =
-  | { outcome: "refunded"; proUntil: Date | null }
+  | { outcome: "refunded"; boostedUntil: Date | null }
   | { outcome: "noop"; reason: "not_found" | "not_paid" };
 
-/** Marks a paid transaction refunded and revokes the PRO period it granted. Idempotent. */
+/** Marks a paid order refunded and takes back exactly its boost. Idempotent. */
 export async function refundPayment(
   db: Db,
   by: { externalId: string } | { reference: string },
@@ -106,17 +95,9 @@ export async function refundPayment(
     db.$transaction(async (tx): Promise<RefundResult> => {
       const row = await tx.transaction.findUnique({ where: by });
       if (!row) return { outcome: "noop", reason: "not_found" };
-      const claim = await tx.transaction.updateMany({
-        where: { id: row.id, status: "paid" },
-        data: { status: "refunded" },
-      });
-      if (claim.count === 0) return { outcome: "noop", reason: "not_paid" };
-      const plan = PLANS[row.planId];
-      const user = await tx.user.findUniqueOrThrow({ where: { id: row.userId } });
-      const proUntil = plan ? shrinkProUntil(user.proUntil, plan.durationDays) : user.proUntil;
-      await tx.user.update({ where: { id: user.id }, data: { proUntil } });
-      await tx.subscription.deleteMany({ where: { txId: row.id } });
-      return { outcome: "refunded", proUntil };
+      const r = await revokeBoost(tx, { transactionId: row.id });
+      if (r.outcome === "noop") return r;
+      return { outcome: "refunded", boostedUntil: r.outcome === "revoked" ? r.boostedUntil : null };
     }),
   );
 }

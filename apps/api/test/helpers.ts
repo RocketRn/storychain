@@ -37,6 +37,13 @@ export async function createCtx(
     DEV_MODE: "true",
     BOT_TOKEN,
     PUBLIC_BASE_URL: "http://test.local",
+    // anti-abuse limits are high here so "many free posts" tests can never trip them;
+    // a dedicated test lowers them on purpose
+    RATE_LIMIT_GLOBAL_PER_MIN: "100000",
+    RATE_LIMIT_POSTS_PER_MIN: "100000",
+    RATE_LIMIT_CHAINS_PER_HOUR: "100000",
+    RATE_LIMIT_REPORTS_PER_HOUR: "100000",
+    RATE_LIMIT_PAYMENTS_PER_MIN: "100000",
     ...env,
   } as NodeJS.ProcessEnv);
   const db = createDb(process.env.TEST_DATABASE_URL as string);
@@ -143,4 +150,10 @@ export async function regionDiff(
   for (let i = 0; i < (ra as Buffer).length; i++)
     sum += Math.abs((ra as Buffer)[i]! - (rb as Buffer)[i]!);
   return sum / (ra as Buffer).length;
+}
+
+/** A fresh user row (created through the real auth path) */
+export async function ensureUser(ctx: TestCtx, tgId: number) {
+  await ctx.app.inject({ url: "/api/me", headers: authHeader(tgId) });
+  return ctx.db.user.findUniqueOrThrow({ where: { telegramId: BigInt(tgId) } });
 }
