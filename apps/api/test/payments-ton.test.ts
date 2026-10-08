@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { Address } from "@ton/core";
 import { PrismaClient } from "@prisma/client";
 import { loadConfig } from "../src/config";
+import { createDb } from "../src/db";
 import { createPending } from "../src/payments/ledger";
 import { rawAddress, sameAddress } from "../src/payments/address";
 import {
@@ -519,6 +520,46 @@ describe("TonVerifier resilience", () => {
     expect(rs.map((r) => r.status)).toEqual(["paid", "already_paid"]);
     expect(warnings).toContain("extra transfer for an already paid reference");
     expect(await ctx.db.chainBoost.count({ where: { txId: tx.id } })).toBe(1);
+  });
+});
+
+describe("TonVerifier: the same transfer seen by two processes at once", () => {
+  it("grants exactly once (conditional claim + unique transfer id), however the race interleaves", async () => {
+    for (let round = 0; round < 5; round++) {
+      const { tx, chainId } = await pendingTx();
+      const e = ev(tx.reference);
+      // two API instances = two database connections, each with its own verifier
+      const dbs = [
+        createDb(process.env.TEST_DATABASE_URL as string),
+        createDb(process.env.TEST_DATABASE_URL as string),
+      ];
+      try {
+        const verifiers = dbs.map(
+          (db) =>
+            new TonVerifier({
+              db,
+              indexer,
+              config: cfg,
+              now: () => new Date(nowMs),
+              logger: quiet,
+            }),
+        );
+        const results = (
+          await Promise.all([
+            verifiers[0]!.processEvents([e]),
+            verifiers[1]!.processEvents([e]),
+            verifiers[0]!.processEvents([e]),
+          ])
+        ).flat();
+        expect(results.filter((r) => r.status === "paid")).toHaveLength(1);
+        expect(results.every((r) => r.status === "paid" || r.status === "already_paid")).toBe(true);
+        expect(await ctx.db.chainBoost.count({ where: { txId: tx.id } })).toBe(1);
+        expect((await chainOf(chainId)).boostedUntil).toEqual(new Date(nowMs + 24 * 3_600_000));
+        expect(await txOf(tx.id)).toMatchObject({ status: "paid", externalId: e.txHash });
+      } finally {
+        await Promise.all(dbs.map((db) => db.$disconnect()));
+      }
+    }
   });
 });
 

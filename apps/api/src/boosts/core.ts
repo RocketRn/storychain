@@ -172,17 +172,25 @@ export async function revokeBoost(
   const boost = await tx.chainBoost.findUnique({ where: { txId: row.id } });
   if (!boost) return { outcome: "revoked_no_boost" }; // e.g. paid while the chain was hidden: nothing to take back
 
-  const chain = await tx.chain.findUnique({ where: { id: boost.chainId } });
+  // Take exactly this boost's duration off the chain's end, never below "now" (null = no boost left).
+  // Compare-and-set like applyBoost: a plain read-then-write would erase a boost committed between the two
+  // (READ COMMITTED on PostgreSQL), i.e. a purchase racing a refund would be paid and silently lost.
   let boostedUntil: Date | null = null;
-  if (chain?.boostedUntil) {
+  for (let attempt = 0; ; attempt++) {
+    const chain = await tx.chain.findUnique({ where: { id: boost.chainId } });
+    boostedUntil = null;
+    if (!chain?.boostedUntil) break;
     const remaining = new Date(
       chain.boostedUntil.getTime() - (boost.endsAt.getTime() - boost.startsAt.getTime()),
     );
     boostedUntil = remaining.getTime() > now.getTime() ? remaining : null;
-    await tx.chain.update({
-      where: { id: chain.id },
+    const upd = await tx.chain.updateMany({
+      where: { id: chain.id, boostedUntil: chain.boostedUntil },
       data: { boostedUntil, isBoosted: boostedUntil !== null },
     });
+    if (upd.count === 1) break;
+    if (attempt + 1 >= MAX_STACK_RETRIES)
+      throw new Error(`revokeBoost: could not update chain ${chain.id} (contention)`);
   }
   await tx.chainBoost.delete({ where: { id: boost.id } });
   return { outcome: "revoked", boostedUntil };

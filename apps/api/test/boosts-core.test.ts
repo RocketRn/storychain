@@ -275,6 +275,80 @@ describe("revokeBoost (refund)", () => {
     );
   });
 
+  it("stacked 24h + 7d: any refund order adds up, and the end never lands in the past", async () => {
+    // B first (the future window), then A
+    {
+      const { user, chain } = await setup();
+      const a = await order(user.id, chain.id);
+      const b = await order(user.id, chain.id, "boost_7d");
+      await apply(a.id, T0);
+      await apply(b.id, T0);
+      expect(await revoke(b.id, at(H))).toEqual({ outcome: "revoked", boostedUntil: at(D) });
+      expect(await revoke(a.id, at(2 * H))).toEqual({ outcome: "revoked", boostedUntil: null });
+      expect(await chainOf(chain.id)).toMatchObject({ boostedUntil: null, isBoosted: false });
+    }
+    // A refunded after it was used up: its full length comes off the end (the refund takes back what it bought)
+    {
+      const { user, chain } = await setup();
+      const a = await order(user.id, chain.id);
+      const b = await order(user.id, chain.id, "boost_7d");
+      await apply(a.id, T0);
+      await apply(b.id, T0);
+      expect(await revoke(a.id, at(30 * H))).toEqual({
+        outcome: "revoked",
+        boostedUntil: at(7 * D),
+      });
+    }
+    // late refund of the long boost: the remaining end would be in the past -> no boost, not a past date
+    {
+      const { user, chain } = await setup();
+      const a = await order(user.id, chain.id);
+      const b = await order(user.id, chain.id, "boost_7d");
+      await apply(a.id, T0);
+      await apply(b.id, T0);
+      const late = at(7 * D + 23 * H);
+      const r = await revoke(b.id, late);
+      expect(r).toEqual({ outcome: "revoked", boostedUntil: null });
+      expect(await chainOf(chain.id)).toMatchObject({ boostedUntil: null, isBoosted: false });
+    }
+  });
+
+  it("a purchase committed between the refund's read and its write is not erased (compare-and-set)", async () => {
+    const { user, chain } = await setup();
+    const a = await order(user.id, chain.id);
+    await apply(a.id, T0); // until T0 + 24h
+    // Simulate READ COMMITTED interleaving: right after the refund reads the chain, another transaction
+    // extends it by 7 days and commits.
+    let raced = false;
+    const racing = new Proxy(db, {
+      get(target, prop) {
+        if (prop !== "chain") return Reflect.get(target, prop);
+        return new Proxy(target.chain, {
+          get(delegate, method) {
+            const fn = Reflect.get(delegate, method) as (...args: unknown[]) => Promise<unknown>;
+            if (method !== "findUnique") return typeof fn === "function" ? fn.bind(delegate) : fn;
+            return async (...args: unknown[]) => {
+              const seen = await fn.apply(delegate, args);
+              if (!raced) {
+                raced = true;
+                await db.chain.update({
+                  where: { id: chain.id },
+                  data: { boostedUntil: at(8 * D) },
+                });
+              }
+              return seen;
+            };
+          },
+        });
+      },
+    }) as unknown as Parameters<typeof revokeBoost>[0];
+    const r = await revokeBoost(racing, { transactionId: a.id, now: at(H) });
+    expect(raced).toBe(true);
+    // 8d - 24h: the concurrent 7 days survive; a blind write would have set null (T0 + 24h - 24h)
+    expect(r).toEqual({ outcome: "revoked", boostedUntil: at(7 * D) });
+    expect((await chainOf(chain.id)).boostedUntil).toEqual(at(7 * D));
+  });
+
   it("a refunded transaction can never be applied again", async () => {
     const { user, chain } = await setup();
     const t = await order(user.id, chain.id);
