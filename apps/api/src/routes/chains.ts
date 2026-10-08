@@ -169,8 +169,8 @@ export function registerChainRoutes(app: FastifyInstance, deps: Deps): void {
         data: {
           id: newChainId(),
           title: body.title,
-          description: body.description ?? null,
-          emoji: body.emoji ?? null,
+          description: body.description || null,
+          emoji: body.emoji || null,
           channelUrl: body.channelUrl ?? null, // already normalized by the schema; stored but private until boosted
           creatorId: me.id,
         },

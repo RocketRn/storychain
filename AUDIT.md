@@ -130,3 +130,30 @@ statistics (`ANALYZE`): a fresh production SQLite has none. "After" is the same 
   ≈ 147 kB entry.
 - Shutdown: start `pnpm --filter @storychain/api start`, `kill -TERM <pid>`: it logs `[shutdown] done` and exits within
   a couple of seconds (the previous version was still serving 4 s later).
+
+## Addendum: pre-launch adversarial review
+
+| #   | Sev  | Finding                                                                                                                                                                                      | Status                                                                              |
+| --- | ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| R1  | High | `revokeBoost` wrote the chain's new end without compare-and-set: on PostgreSQL a purchase committed between the refund's read and write was erased.                                          | Fixed (CAS loop) + interleaving test (mutation-checked).                            |
+| R2  | Med  | No Unicode hygiene on user text: zero-width-only titles passed the length check; bidi overrides (RLO) could visually reverse the link after a title in story captions and the Stars invoice. | Fixed: `sanitizeText` in every schema, the client and at render/share/invoice time. |
+| R3  | Low  | Ellipsis/truncation cut by UTF-16 unit and could split emoji into lone surrogates on the card and in story text.                                                                             | Fixed: grapheme-based.                                                              |
+| R4  | Low  | Files orphaned by a crash between upload and commit were never reclaimed (slow disk growth).                                                                                                 | Added `gc-uploads` (dry run by default, key-based, 24 h grace).                     |
+| R5  | Info | CSP framing/script directives were checked with "contains", so an added origin would not fail a test.                                                                                        | Tests now pin them exactly.                                                         |
+
+Verified sound without changes: concurrent settlement of one TON transfer (two connections, exactly one grant),
+TON finality (no reorg window; unfinished traces skipped), keyset cursor ordering with identical timestamps,
+bigint-only amount paths, `auth_date` checked against the server clock only (client clocks play no role; 60 s
+tolerance for Telegram's own skew).
+
+Residual risks to monitor:
+
+- A leaked `initData` is a bearer credential for `INITDATA_MAX_AGE_SEC` (24 h). It is never logged (redacted), never sent to
+  third parties (CSP `script-src` is self + telegram.org, `Referrer-Policy: no-referrer`), but within the window it allows
+  everything the user can do, including changing a boosted chain's channel link. Watch for unexpected `PATCH
+/api/chains/:id` channel changes; lower the window if that matters more than long sessions.
+- The verifier trusts one indexer (TonAPI). Alert on "transfer rejected", "history window truncated" and "manual refund
+  needed" log lines; reconcile paid GRM orders against the merchant wallet's on-chain history periodically.
+- Schedule `gc-uploads --delete` (local disk) weekly; on S3 add an equivalent job.
+- `lt` values from TonAPI are parsed as JS numbers; they are far below 2^53 today but would lose precision for paging if
+  that ever changed.

@@ -85,6 +85,37 @@ describe("single-origin mode (API serves the built web app)", () => {
     expect(res.headers["x-content-type-options"]).toBe("nosniff");
   });
 
+  it("pins the clickjacking/script directives EXACTLY (an added origin or 'unsafe-*' must fail here)", async () => {
+    for (const url of ["/", "/chain/abc12345", "/assets/index-abc123.js"]) {
+      const csp = String((await ctx.app.inject({ url })).headers["content-security-policy"]);
+      const directive = (name: string) =>
+        csp
+          .split(";")
+          .map((d) => d.trim().split(/\s+/))
+          .find((d) => d[0] === name)
+          ?.slice(1);
+      // embeddable only by ourselves and Telegram's own web clients (web.telegram.org/k, /a)
+      expect(directive("frame-ancestors"), url).toEqual([
+        "'self'",
+        "https://web.telegram.org",
+        "https://*.telegram.org",
+      ]);
+      expect(directive("script-src"), url).toEqual(["'self'", "https://telegram.org"]);
+      expect(directive("object-src"), url).toEqual(["'none'"]);
+      expect(directive("base-uri"), url).toEqual(["'self'"]);
+      expect(csp).not.toMatch(/unsafe-eval/);
+    }
+  });
+
+  it("the API alone (no web app served) cannot be framed at all", async () => {
+    const api = await createCtx({ SERVE_WEB: "false" });
+    const res = await api.app.inject({ url: "/api/health" });
+    expect(res.headers["x-frame-options"]).toBe("SAMEORIGIN");
+    expect(String(res.headers["content-security-policy"])).toContain("frame-ancestors 'self'");
+    await api.app.close();
+    await api.db.$disconnect();
+  });
+
   it("lets wallets fetch the TonConnect manifest cross-origin", async () => {
     const res = await ctx.app.inject({ url: "/tonconnect-manifest.json" });
     expect(res.statusCode).toBe(200);

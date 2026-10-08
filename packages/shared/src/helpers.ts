@@ -8,6 +8,36 @@ export const CHAIN_DESCRIPTION_MAX = 300;
 export const CHAIN_EMOJI_MAX = 8;
 export const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 
+/**
+ * Characters that have no business in a title, caption or description:
+ *  - C0/C1 control characters (tabs and line breaks are turned into spaces first)
+ *  - bidi embeddings/overrides/isolates and direction marks: an RLO inside a title reverses everything after
+ *    it, e.g. the "Join: <link>" that follows the title in a story caption or the text of a Stars invoice
+ *  - zero-width space, word joiner and invisible operators, BOM, Mongolian vowel separator: a title made only
+ *    of these passed the length check and rendered as nothing
+ * Kept on purpose: ZWJ (U+200D, emoji sequences such as families), ZWNJ (U+200C, Persian/Indic spelling),
+ * variation selectors and tag characters (emoji presentation, subdivision flags).
+ */
+/* eslint-disable no-control-regex -- matching control characters is the point of this pattern */
+const INVISIBLE =
+  /[\u0000-\u0008\u000E-\u001F\u007F-\u009F\u061C\u180E\u200B\u200E\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/g;
+/* eslint-enable no-control-regex */
+
+/** NFC-normalizes, strips invisible/direction-changing characters and collapses whitespace. */
+export function sanitizeText(input: string, opts: { multiline?: boolean } = {}): string {
+  let s = input.normalize("NFC").replace(/\r\n?/g, "\n");
+  if (!opts.multiline) s = s.replace(/[\t\n\v\f]/g, " ");
+  else s = s.replace(/[\t\v\f]/g, " ");
+  s = s.replace(INVISIBLE, "");
+  if (!opts.multiline) return s.replace(/ {2,}/g, " ").trim();
+  return s
+    .split("\n")
+    .map((line) => line.replace(/ {2,}/g, " ").trim())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 export interface ChainInput {
   title: string;
   description?: string;
@@ -25,9 +55,10 @@ export function normalizeChainInput(raw: {
   emoji?: string;
   channelUrl?: string;
 }): ChainInput | null {
-  const title = raw.title.trim();
-  const description = raw.description?.trim();
-  const emoji = raw.emoji?.trim();
+  const title = sanitizeText(raw.title);
+  const description =
+    raw.description === undefined ? undefined : sanitizeText(raw.description, { multiline: true });
+  const emoji = raw.emoji === undefined ? undefined : sanitizeText(raw.emoji);
   if (title.length < CHAIN_TITLE_MIN || title.length > CHAIN_TITLE_MAX) return null;
   if (description && description.length > CHAIN_DESCRIPTION_MAX) return null;
   if (emoji && emoji.length > CHAIN_EMOJI_MAX) return null;

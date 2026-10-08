@@ -170,4 +170,37 @@ describe("templates data", () => {
       expect(STICKER_W).toBeLessThanOrEqual(CARD_WIDTH);
     }
   });
+
+  describe("never cuts a character in half", () => {
+    const perChar = (t: string) => Array.from(t).length * 10; // 10 px per code point
+    const lone = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+    it("emoji (surrogate pairs) and ZWJ sequences survive an ellipsis", () => {
+      const family = "👨\u200D👩\u200D👧";
+      for (let width = 10; width < 200; width += 7) {
+        const out = ellipsize(
+          (t) => perChar(t),
+          `Cats ${family}${family} and 🐱🐱🐱 forever`,
+          40,
+          width,
+        );
+        expect(lone.test(out), out).toBe(false);
+        // a family is either complete or absent, never a fragment such as "👨\u200D"
+        expect(/\u200D(?!👩|👧)/u.test(out), out).toBe(false);
+      }
+    });
+    it("fitTextLines on a title of one long emoji run stays within its lines", () => {
+      const fit = fitTextLines(
+        (t, size) => Array.from(t).length * size * 0.6,
+        "🐱".repeat(60),
+        300,
+        {
+          maxLines: 2,
+          maxSize: 54,
+          minSize: 28,
+        },
+      );
+      expect(fit.lines.length).toBeLessThanOrEqual(2);
+      for (const l of fit.lines) expect(lone.test(l)).toBe(false);
+    });
+  });
 });

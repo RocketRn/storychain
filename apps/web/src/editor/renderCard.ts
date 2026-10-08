@@ -1,4 +1,5 @@
 import {
+  sanitizeText,
   CARD_HEIGHT,
   CARD_WIDTH,
   STICKER_H,
@@ -164,7 +165,8 @@ function drawSticker(ctx: CanvasRenderingContext2D, o: CardOptions, font: string
     ctx.font = canvasFont(font, size);
     return ctx.measureText(text).width;
   };
-  const fit = fitTextLines(measure, o.chainTitle, titleW, {
+  // stored titles may predate sanitizing: no direction overrides / invisible characters on the card
+  const fit = fitTextLines(measure, sanitizeText(o.chainTitle), titleW, {
     maxLines: 2,
     maxSize: 54,
     minSize: 28,

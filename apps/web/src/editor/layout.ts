@@ -96,16 +96,29 @@ export function gradientLine(w: number, h: number, angleDeg: number) {
 export type Measure = (text: string, size: number) => number;
 
 /** Longest prefix of `text` (plus "…") that fits maxWidth. */
+/** User-perceived characters: an emoji family or a flag is one unit and is never cut in half. */
+export function graphemes(text: string): string[] {
+  if (typeof Intl !== "undefined" && "Segmenter" in Intl) {
+    return Array.from(
+      new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(text),
+      (g) => g.segment,
+    );
+  }
+  return Array.from(text); // older engines: at least never split a surrogate pair
+}
+
 export function ellipsize(measure: Measure, text: string, size: number, maxWidth: number): string {
   if (measure(text, size) <= maxWidth) return text;
+  const units = graphemes(text);
+  const head = (n: number) => units.slice(0, n).join("").trimEnd() + "…";
   let lo = 0;
-  let hi = text.length;
+  let hi = units.length;
   while (lo < hi) {
     const mid = Math.ceil((lo + hi) / 2);
-    if (measure(text.slice(0, mid).trimEnd() + "…", size) <= maxWidth) lo = mid;
+    if (measure(head(mid), size) <= maxWidth) lo = mid;
     else hi = mid - 1;
   }
-  return text.slice(0, lo).trimEnd() + "…";
+  return head(lo);
 }
 
 function wrap(measure: Measure, words: string[], size: number, maxWidth: number): string[] | null {

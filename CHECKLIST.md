@@ -108,5 +108,6 @@ Legend: ☐ to do. Run each item on **Android**, **iOS** and **Desktop** unless 
 - ☐ Duplicate Stars charge: open the same invoice link in two clients, pay in both → one boost, the second charge is refunded automatically and the user is told (if `refundStarPayment` fails the log says which charge to refund by hand).
 - ☐ A re-posted card's old image URL returns 404 (local disk and S3), and a normal card's image is served with `Cache-Control: … immutable`.
 - ☐ SQLite only: run `PRAGMA optimize;` now and then (PostgreSQL maintains planner statistics itself). The feed indexes work without it, but it keeps the planner honest as data grows.
+- ☐ Local disk: `pnpm --filter @storychain/api gc-uploads` (dry run) shows nothing unexpected; schedule `gc-uploads --delete` weekly. S3: an equivalent bucket-side job.
 - ☐ Housekeeping to schedule: old `expired`/`failed` rows in `Transaction` are never needed again (paid and refunded rows are history - keep them).
 - ☐ Platform policy: re-read Telegram's current rules for digital goods in Mini Apps and confirm the per-platform payment flag matches.

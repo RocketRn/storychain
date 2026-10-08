@@ -5,6 +5,7 @@
  *  - shareToStory needs a PUBLIC HTTPS media URL and Telegram client >= 7.8.
  *  - widget_link in stories is Premium-only for the author, so the link is ALWAYS also in the text.
  */
+import { sanitizeText } from "@storychain/shared/light";
 import type { StoryParams, TgFacade } from "./tg";
 import { translate, type Lang } from "./i18n";
 
@@ -19,13 +20,22 @@ export interface ShareInfo {
   lang: Lang;
 }
 
+/** Cuts on code points, never inside a surrogate pair (an emoji must not turn into "\uFFFD"). */
 function truncate(s: string, max: number): string {
+  const cps = Array.from(s);
   if (s.length <= max) return s;
-  return max <= 1 ? "" : `${s.slice(0, max - 1).trimEnd()}…`;
+  let out = "";
+  for (const cp of cps) {
+    if (out.length + cp.length > max - 1) break;
+    out += cp;
+  }
+  return max <= 1 ? "" : `${out.trimEnd()}…`;
 }
 
 /** `🐱 «Title»\n🔗 Join: <link>`, never longer than STORY_TEXT_MAX (title is shortened first, link never cut). */
-export function buildStoryText({ link, title, emoji, lang }: ShareInfo): string {
+export function buildStoryText({ link, title: rawTitle, emoji, lang }: ShareInfo): string {
+  // stored titles may predate sanitizing: a direction override here would visually reverse the link
+  const title = sanitizeText(rawTitle);
   const tail = `🔗 ${translate(lang, "shareJoin")}: ${link}`;
   const prefix = emoji ? `${emoji} ` : "";
   const room = STORY_TEXT_MAX - tail.length - 1 - prefix.length - 2; // newline + «»
@@ -45,7 +55,8 @@ export function buildStoryParams(info: ShareInfo & { isTgPremium: boolean }): St
 }
 
 /** https://t.me/share/url — Telegram appends `url` to `text` itself, so the text carries no link. */
-export function buildSendToChatUrl({ link, title, emoji, lang }: ShareInfo): string {
+export function buildSendToChatUrl({ link, title: rawTitle, emoji, lang }: ShareInfo): string {
+  const title = sanitizeText(rawTitle);
   const prefix = emoji ? `${emoji} ` : "";
   const text = `${prefix}«${truncate(title, 120)}» — ${translate(lang, "shareJoin")}!`;
   return `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text)}`;

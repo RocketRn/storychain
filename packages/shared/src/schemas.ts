@@ -6,7 +6,20 @@ import {
   CHAIN_TITLE_MIN,
   CHANNEL_URL_MAX,
   parseChannelUrl,
+  sanitizeText,
 } from "./helpers";
+
+/** Visible text: sanitized (see sanitizeText) BEFORE the length limits are checked. */
+const line = (min: number, max: number) =>
+  z
+    .string()
+    .transform((v) => sanitizeText(v))
+    .pipe(z.string().min(min).max(max));
+const block = (min: number, max: number) =>
+  z
+    .string()
+    .transform((v) => sanitizeText(v, { multiline: true }))
+    .pipe(z.string().min(min).max(max));
 
 export const chainIdSchema = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
 
@@ -24,9 +37,9 @@ export const channelUrlSchema = z
   });
 
 export const createChainSchema = z.object({
-  title: z.string().trim().min(CHAIN_TITLE_MIN).max(CHAIN_TITLE_MAX),
-  description: z.string().trim().max(CHAIN_DESCRIPTION_MAX).optional(),
-  emoji: z.string().trim().max(CHAIN_EMOJI_MAX).optional(),
+  title: line(CHAIN_TITLE_MIN, CHAIN_TITLE_MAX),
+  description: block(0, CHAIN_DESCRIPTION_MAX).optional(),
+  emoji: line(0, CHAIN_EMOJI_MAX).optional(),
   channelUrl: channelUrlSchema.optional(),
 });
 
@@ -34,8 +47,8 @@ export const createChainSchema = z.object({
 export const patchChainSchema = z
   .object({
     channelUrl: channelUrlSchema.nullable().optional(),
-    emoji: z.string().trim().max(CHAIN_EMOJI_MAX).nullable().optional(),
-    description: z.string().trim().max(CHAIN_DESCRIPTION_MAX).nullable().optional(),
+    emoji: line(0, CHAIN_EMOJI_MAX).nullable().optional(),
+    description: block(0, CHAIN_DESCRIPTION_MAX).nullable().optional(),
   })
   .strict()
   .refine((v) => Object.keys(v).length > 0, { message: "Nothing to update" });
@@ -54,7 +67,7 @@ export const listPostsQuerySchema = z.object({
 /** Non-file fields of POST /chains/:id/posts */
 export const createPostFieldsSchema = z.object({
   templateId: z.string().min(1).max(64),
-  caption: z.string().trim().max(200).optional(),
+  caption: line(0, 200).optional(),
 });
 export type CreatePostFields = z.infer<typeof createPostFieldsSchema>;
 
@@ -62,7 +75,7 @@ export const reportSchema = z
   .object({
     chainId: chainIdSchema.optional(),
     postId: z.string().min(1).max(64).optional(),
-    reason: z.string().trim().min(3).max(500),
+    reason: block(3, 500),
   })
   .refine((v) => v.chainId || v.postId, { message: "chainId or postId required" });
 

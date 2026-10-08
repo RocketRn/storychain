@@ -1,5 +1,5 @@
 import type { Bot } from "grammy";
-import type { BoostPlanId } from "@storychain/shared";
+import { sanitizeText, type BoostPlanId } from "@storychain/shared";
 import type { Transaction, User } from "@prisma/client";
 import { assertBoostHorizon } from "../boosts/core";
 import { parsePlan, validateBoostPurchase } from "../boosts/purchase";
@@ -48,14 +48,16 @@ const duration = (planId: BoostPlanId, ru: boolean): string =>
   planId === "boost_24h" ? (ru ? "24 ч" : "24h") : ru ? "7 дн" : "7d";
 
 /** `Boost "<chain title>" — 24h`, the chain title shortened so the whole title fits Telegram's 32 chars. */
-export function invoiceTitle(chainTitle: string, planId: BoostPlanId, ru: boolean): string {
+export function invoiceTitle(rawTitle: string, planId: BoostPlanId, ru: boolean): string {
+  const chainTitle = sanitizeText(rawTitle);
   const [open, close] = ru ? ["Буст «", "»"] : ['Boost "', '"'];
   const tail = `${close} — ${duration(planId, ru)}`;
   const room = TITLE_MAX - [...open].length - [...tail].length;
   return `${open}${truncate(chainTitle, Math.max(1, room))}${tail}`;
 }
 
-export function invoiceDescription(chainTitle: string, planId: BoostPlanId, ru: boolean): string {
+export function invoiceDescription(rawTitle: string, planId: BoostPlanId, ru: boolean): string {
+  const chainTitle = sanitizeText(rawTitle);
   const text = ru
     ? `Марафон «${chainTitle}» будет закреплён в карусели «Горячие марафоны» на ${duration(planId, ru)}.`
     : `The marathon "${chainTitle}" will be pinned to the Hot Marathons carousel for ${duration(planId, ru)}.`;

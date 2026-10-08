@@ -157,4 +157,20 @@ describe("shareToStoryFlow", () => {
     d.markShared.mockRejectedValueOnce(new Error("offline"));
     await expect(shareToStoryFlow(args, d.deps)).resolves.toBe("story");
   });
+
+  it("titles stored before sanitizing cannot reverse the link (direction overrides are removed)", () => {
+    const text = buildStoryText({
+      link: "https://t.me/bot?startapp=chain_x",
+      title: "Cats \u202Eknil",
+      lang: "en",
+    });
+    expect(text).not.toMatch(/[\u202A-\u202E\u2066-\u2069]/);
+    expect(text).toContain("https://t.me/bot?startapp=chain_x");
+  });
+
+  it("shortening a long title never splits an emoji", () => {
+    const text = buildStoryText({ link: "https://t.me/b", title: "🐱".repeat(150), lang: "en" });
+    expect(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/.test(text)).toBe(false);
+    expect(text.length).toBeLessThanOrEqual(200);
+  });
 });
